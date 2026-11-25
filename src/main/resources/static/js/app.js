@@ -1,0 +1,1029 @@
+/**
+ * Employee Management System - Client Application with User-Based Access Control (UBAC/RBAC)
+ */
+
+const API_BASE = '/api/v1';
+
+// State Management
+const state = {
+    auth: {
+        token: localStorage.getItem('ems_jwt') || null,
+        username: localStorage.getItem('ems_user') || null,
+        roles: JSON.parse(localStorage.getItem('ems_roles') || '[]'),
+        employeeId: localStorage.getItem('ems_emp_id') || null
+    },
+    currentTab: 'dashboard',
+    employees: [],
+    departments: [],
+    stats: null,
+    pagination: {
+        page: 0,
+        size: 10,
+        totalPages: 0,
+        totalElements: 0,
+        sortBy: 'id',
+        direction: 'desc'
+    },
+    filters: {
+        keyword: '',
+        departmentId: '',
+        status: ''
+    },
+    activeEmployeeId: null,
+    activeDeleteTarget: null // { type: 'employee' | 'department', id: number, name: string }
+};
+
+// RBAC Role Helpers
+function isAdmin() {
+    return state.auth.roles && state.auth.roles.includes('ROLE_ADMIN');
+}
+
+function isManager() {
+    return state.auth.roles && state.auth.roles.includes('ROLE_MANAGER');
+}
+
+function isEmployee() {
+    return state.auth.roles && state.auth.roles.includes('ROLE_EMPLOYEE');
+}
+
+function canWriteEmployees() {
+    return isAdmin() || isManager();
+}
+
+function canDelete() {
+    return isAdmin();
+}
+
+// Authenticated Fetch Wrapper
+async function authFetch(url, options = {}) {
+    const headers = options.headers ? { ...options.headers } : {};
+
+    if (state.auth.token) {
+        headers['Authorization'] = `Bearer ${state.auth.token}`;
+    }
+
+    const res = await fetch(url, { ...options, headers });
+
+    if (res.status === 401) {
+        // Token expired or invalid
+        handleLogout();
+        showToast('Session expired or unauthorized. Please log in.', 'error');
+        throw new Error('Unauthorized');
+    }
+
+    if (res.status === 403) {
+        showToast('Access Denied: You do not have permission for this action.', 'error');
+        throw new Error('Forbidden');
+    }
+
+    return res;
+}
+
+// DOM Elements
+const elements = {
+    tabs: document.querySelectorAll('.nav-item'),
+    tabContents: document.querySelectorAll('.tab-content'),
+    pageHeading: document.getElementById('page-heading'),
+    pageSubheading: document.getElementById('page-subheading'),
+
+    // Auth
+    modalLogin: document.getElementById('modal-login'),
+    formLogin: document.getElementById('form-login'),
+    loginUsername: document.getElementById('login-username'),
+    loginPassword: document.getElementById('login-password'),
+    authUserAvatar: document.getElementById('auth-user-avatar'),
+    authUserName: document.getElementById('auth-user-name'),
+    authUserRole: document.getElementById('auth-user-role'),
+    btnLogout: document.getElementById('btn-logout'),
+    btnQuickAdmin: document.getElementById('btn-quick-admin'),
+    btnQuickManager: document.getElementById('btn-quick-manager'),
+    btnQuickEmployee: document.getElementById('btn-quick-employee'),
+
+    // Dashboard
+    statTotalEmp: document.getElementById('stat-total-emp'),
+    statActiveEmp: document.getElementById('stat-active-emp'),
+    statLeaveEmp: document.getElementById('stat-leave-emp'),
+    statTotalDept: document.getElementById('stat-total-dept'),
+    statAvgSalary: document.getElementById('stat-avg-salary'),
+    statTotalPayroll: document.getElementById('stat-total-payroll'),
+    deptBarsContainer: document.getElementById('department-bars-container'),
+
+    // Employee List
+    employeesTableBody: document.getElementById('employees-table-body'),
+    inputSearch: document.getElementById('input-search'),
+    filterDepartment: document.getElementById('filter-department'),
+    filterStatus: document.getElementById('filter-status'),
+    filterSort: document.getElementById('filter-sort'),
+    btnRefreshEmployees: document.getElementById('btn-refresh-employees'),
+    paginationInfo: document.getElementById('pagination-info'),
+    pageDisplay: document.getElementById('page-display'),
+    btnPrevPage: document.getElementById('btn-prev-page'),
+    btnNextPage: document.getElementById('btn-next-page'),
+    btnExportCsv: document.getElementById('btn-export-csv'),
+
+    // Departments
+    departmentsCardsContainer: document.getElementById('departments-cards-container'),
+
+    // Modals
+    modalEmployee: document.getElementById('modal-employee'),
+    modalDept: document.getElementById('modal-department'),
+    modalViewEmployee: document.getElementById('modal-view-employee'),
+    modalDelete: document.getElementById('modal-delete'),
+
+    // Forms
+    formEmployee: document.getElementById('form-employee'),
+    formDepartment: document.getElementById('form-department'),
+    modalEmployeeTitle: document.getElementById('modal-employee-title'),
+    modalDeptTitle: document.getElementById('modal-dept-title'),
+    btnConfirmDelete: document.getElementById('btn-confirm-delete'),
+    deleteMessage: document.getElementById('delete-message'),
+    viewEmployeeContent: document.getElementById('view-employee-content'),
+
+    // Buttons
+    btnOpenAddModal: document.getElementById('btn-open-add-modal'),
+    btnOpenDeptModal: document.getElementById('btn-open-dept-modal'),
+    tileAddEmp: document.getElementById('tile-add-emp'),
+    tileAddDept: document.getElementById('tile-add-dept'),
+    btnEditFromView: document.getElementById('btn-edit-from-view'),
+
+    // Toast
+    toastContainer: document.getElementById('toast-container')
+};
+
+// Initialize Application
+document.addEventListener('DOMContentLoaded', () => {
+    initEventListeners();
+
+    if (!state.auth.token) {
+        openLoginModal();
+    } else {
+        updateAuthUserUI();
+        applyRbacUI();
+        loadDepartments();
+        loadDashboardStats();
+        loadEmployees();
+    }
+});
+
+// Event Listeners Setup
+function initEventListeners() {
+    // Navigation Tabs
+    elements.tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            const tabName = tab.getAttribute('data-tab');
+            switchTab(tabName);
+        });
+    });
+
+    // Auth actions
+    if (elements.btnLogout) {
+        elements.btnLogout.addEventListener('click', handleLogout);
+    }
+    if (elements.formLogin) {
+        elements.formLogin.addEventListener('submit', handleLoginFormSubmit);
+    }
+
+    // Quick Login Demo Buttons
+    if (elements.btnQuickAdmin) {
+        elements.btnQuickAdmin.addEventListener('click', () => doLogin('admin', 'admin123'));
+    }
+    if (elements.btnQuickManager) {
+        elements.btnQuickManager.addEventListener('click', () => doLogin('manager', 'manager123'));
+    }
+    if (elements.btnQuickEmployee) {
+        elements.btnQuickEmployee.addEventListener('click', () => doLogin('user', 'user123'));
+    }
+
+    // Quick Action Tiles
+    if (elements.tileAddEmp) {
+        elements.tileAddEmp.addEventListener('click', () => {
+            if (canWriteEmployees()) openEmployeeModal();
+            else showToast('Access Denied: Managers or Admins only', 'error');
+        });
+    }
+    if (elements.tileAddDept) {
+        elements.tileAddDept.addEventListener('click', () => {
+            if (canDelete()) openDepartmentModal();
+            else showToast('Access Denied: Admins only', 'error');
+        });
+    }
+
+    // Modal Triggers
+    if (elements.btnOpenAddModal) {
+        elements.btnOpenAddModal.addEventListener('click', () => {
+            if (canWriteEmployees()) openEmployeeModal();
+            else showToast('Access Denied: Managers or Admins only', 'error');
+        });
+    }
+    if (elements.btnOpenDeptModal) {
+        elements.btnOpenDeptModal.addEventListener('click', () => {
+            if (canDelete()) openDepartmentModal();
+            else showToast('Access Denied: Admins only', 'error');
+        });
+    }
+
+    // Modal Close Buttons
+    document.querySelectorAll('[data-close-modal]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const modalId = btn.getAttribute('data-close-modal');
+            closeModal(modalId);
+        });
+    });
+
+    // Close on background click (except login modal when unauthenticated)
+    document.querySelectorAll('.modal-backdrop').forEach(modal => {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal && modal.id !== 'modal-login') {
+                modal.classList.remove('open');
+            }
+        });
+    });
+
+    // Search and Filters
+    let debounceTimer;
+    elements.inputSearch.addEventListener('input', (e) => {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+            state.filters.keyword = e.target.value.trim();
+            state.pagination.page = 0;
+            loadEmployees();
+        }, 350);
+    });
+
+    elements.filterDepartment.addEventListener('change', (e) => {
+        state.filters.departmentId = e.target.value;
+        state.pagination.page = 0;
+        loadEmployees();
+    });
+
+    elements.filterStatus.addEventListener('change', (e) => {
+        state.filters.status = e.target.value;
+        state.pagination.page = 0;
+        loadEmployees();
+    });
+
+    elements.filterSort.addEventListener('change', (e) => {
+        const [sortBy, direction] = e.target.value.split(',');
+        state.pagination.sortBy = sortBy;
+        state.pagination.direction = direction;
+        loadEmployees();
+    });
+
+    elements.btnRefreshEmployees.addEventListener('click', () => {
+        loadEmployees();
+        showToast('Employee list refreshed', 'info');
+    });
+
+    // Pagination
+    elements.btnPrevPage.addEventListener('click', () => {
+        if (state.pagination.page > 0) {
+            state.pagination.page--;
+            loadEmployees();
+        }
+    });
+
+    elements.btnNextPage.addEventListener('click', () => {
+        if (state.pagination.page < state.pagination.totalPages - 1) {
+            state.pagination.page++;
+            loadEmployees();
+        }
+    });
+
+    // Export CSV (Auth protected)
+    elements.btnExportCsv.addEventListener('click', async () => {
+        if (!canWriteEmployees()) {
+            showToast('Access Denied: Export restricted to Managers and Admins', 'error');
+            return;
+        }
+        try {
+            const res = await authFetch(`${API_BASE}/employees/export/csv`);
+            if (res.ok) {
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'employees.csv';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                showToast('CSV downloaded successfully', 'success');
+            }
+        } catch (err) {
+            console.error('CSV Export Error:', err);
+        }
+    });
+
+    // Form Submissions
+    elements.formEmployee.addEventListener('submit', handleEmployeeFormSubmit);
+    elements.formDepartment.addEventListener('submit', handleDepartmentFormSubmit);
+    elements.btnConfirmDelete.addEventListener('click', handleConfirmDelete);
+
+    if (elements.btnEditFromView) {
+        elements.btnEditFromView.addEventListener('click', () => {
+            closeModal('modal-view-employee');
+            if (state.activeEmployeeId) {
+                const emp = state.employees.find(e => e.id === state.activeEmployeeId);
+                if (emp) openEmployeeModal(emp);
+            }
+        });
+    }
+}
+
+// Authentication Handlers
+function openLoginModal() {
+    if (elements.modalLogin) {
+        elements.modalLogin.classList.add('open');
+    }
+}
+
+async function doLogin(usernameOrEmail, password) {
+    try {
+        const res = await fetch(`${API_BASE}/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ usernameOrEmail, password })
+        });
+
+        const json = await res.json();
+
+        if (res.ok && json.success) {
+            const authData = json.data;
+            state.auth.token = authData.token;
+            state.auth.username = authData.username;
+            state.auth.roles = authData.roles;
+            state.auth.employeeId = authData.employeeId;
+
+            localStorage.setItem('ems_jwt', authData.token);
+            localStorage.setItem('ems_user', authData.username);
+            localStorage.setItem('ems_roles', JSON.stringify(authData.roles));
+            if (authData.employeeId) {
+                localStorage.setItem('ems_emp_id', authData.employeeId);
+            }
+
+            closeModal('modal-login');
+            updateAuthUserUI();
+            applyRbacUI();
+            showToast(`Welcome back, ${authData.username}!`, 'success');
+
+            loadDepartments();
+            loadDashboardStats();
+            loadEmployees();
+        } else {
+            showToast(json.message || 'Invalid username or password', 'error');
+        }
+    } catch (err) {
+        console.error('Login error:', err);
+        showToast('Login failed. Please check backend connection.', 'error');
+    }
+}
+
+async function handleLoginFormSubmit(e) {
+    e.preventDefault();
+    const u = elements.loginUsername.value.trim();
+    const p = elements.loginPassword.value;
+    await doLogin(u, p);
+}
+
+function handleLogout() {
+    state.auth = { token: null, username: null, roles: [], employeeId: null };
+    localStorage.removeItem('ems_jwt');
+    localStorage.removeItem('ems_user');
+    localStorage.removeItem('ems_roles');
+    localStorage.removeItem('ems_emp_id');
+    openLoginModal();
+    showToast('Logged out successfully', 'info');
+}
+
+function updateAuthUserUI() {
+    if (!state.auth.username) return;
+    elements.authUserName.textContent = state.auth.username;
+    elements.authUserAvatar.textContent = state.auth.username.substring(0, 2).toUpperCase();
+
+    let primaryRole = 'EMPLOYEE';
+    let roleClass = 'badge-employee';
+
+    if (isAdmin()) {
+        primaryRole = 'ADMIN';
+        roleClass = 'badge-admin';
+    } else if (isManager()) {
+        primaryRole = 'MANAGER';
+        roleClass = 'badge-manager';
+    }
+
+    elements.authUserRole.textContent = primaryRole;
+    elements.authUserRole.className = `user-role-badge ${roleClass}`;
+}
+
+// User-Based Access Control UI Guard
+function applyRbacUI() {
+    const isAdm = isAdmin();
+    const isMgr = isManager();
+    const canWrite = isAdm || isMgr;
+
+    // Add Employee Button
+    if (elements.btnOpenAddModal) {
+        elements.btnOpenAddModal.style.display = canWrite ? 'inline-flex' : 'none';
+    }
+
+    // Export CSV Button
+    if (elements.btnExportCsv) {
+        elements.btnExportCsv.style.display = canWrite ? 'inline-flex' : 'none';
+    }
+
+    // Add Department Button
+    if (elements.btnOpenDeptModal) {
+        elements.btnOpenDeptModal.style.display = isAdm ? 'inline-flex' : 'none';
+    }
+
+    // Quick Action Tiles
+    if (elements.tileAddEmp) {
+        elements.tileAddEmp.style.display = canWrite ? 'flex' : 'none';
+    }
+    if (elements.tileAddDept) {
+        elements.tileAddDept.style.display = isAdm ? 'flex' : 'none';
+    }
+
+    // Modal Edit button in Profile View
+    if (elements.btnEditFromView) {
+        elements.btnEditFromView.style.display = canWrite ? 'inline-flex' : 'none';
+    }
+}
+
+// Tab Switching
+function switchTab(tabName) {
+    state.currentTab = tabName;
+    elements.tabs.forEach(t => {
+        if (t.getAttribute('data-tab') === tabName) {
+            t.classList.add('active');
+        } else {
+            t.classList.remove('active');
+        }
+    });
+
+    elements.tabContents.forEach(content => {
+        if (content.id === `tab-${tabName}`) {
+            content.classList.add('active');
+        } else {
+            content.classList.remove('active');
+        }
+    });
+
+    if (tabName === 'dashboard') {
+        elements.pageHeading.textContent = 'Dashboard Overview';
+        elements.pageSubheading.textContent = 'Manage team members, roles, and department performance';
+        loadDashboardStats();
+    } else if (tabName === 'employees') {
+        elements.pageHeading.textContent = 'Employees Directory';
+        elements.pageSubheading.textContent = 'Search, filter, view and manage staff records';
+        loadEmployees();
+    } else if (tabName === 'departments') {
+        elements.pageHeading.textContent = 'Departments';
+        elements.pageSubheading.textContent = 'Organizational business units and structures';
+        loadDepartments();
+    }
+}
+
+// Fetch & Render Dashboard Stats
+async function loadDashboardStats() {
+    try {
+        const res = await authFetch(`${API_BASE}/dashboard/stats`);
+        const json = await res.json();
+        if (json.success) {
+            const data = json.data;
+            state.stats = data;
+
+            elements.statTotalEmp.textContent = data.totalEmployees || 0;
+            elements.statActiveEmp.textContent = data.activeEmployees || 0;
+            elements.statLeaveEmp.textContent = data.onLeaveEmployees || 0;
+            elements.statTotalDept.textContent = data.totalDepartments || 0;
+            elements.statAvgSalary.textContent = formatCurrency(data.averageSalary);
+            elements.statTotalPayroll.textContent = formatCurrency(data.totalPayroll);
+
+            renderDepartmentBars(data.departmentDistribution, data.totalEmployees);
+        }
+    } catch (err) {
+        console.error('Failed to load dashboard stats:', err);
+    }
+}
+
+function renderDepartmentBars(dist, total) {
+    if (!elements.deptBarsContainer) return;
+    if (!dist || Object.keys(dist).length === 0) {
+        elements.deptBarsContainer.innerHTML = '<p class="text-muted">No department distribution data available.</p>';
+        return;
+    }
+
+    let html = '';
+    const max = total > 0 ? total : 1;
+    for (const [deptName, count] of Object.entries(dist)) {
+        const pct = Math.round((count / max) * 100);
+        html += `
+            <div class="dept-bar-item">
+                <div class="dept-bar-info">
+                    <strong>${escapeHtml(deptName)}</strong>
+                    <span>${count} (${pct}%)</span>
+                </div>
+                <div class="dept-bar-track">
+                    <div class="dept-bar-fill" style="width: ${pct}%"></div>
+                </div>
+            </div>
+        `;
+    }
+    elements.deptBarsContainer.innerHTML = html;
+}
+
+// Fetch & Render Departments
+async function loadDepartments() {
+    try {
+        const res = await authFetch(`${API_BASE}/departments`);
+        const json = await res.json();
+        if (json.success) {
+            state.departments = json.data;
+            renderDepartmentCards(json.data);
+            populateDepartmentDropdowns(json.data);
+        }
+    } catch (err) {
+        console.error('Failed to load departments:', err);
+    }
+}
+
+function renderDepartmentCards(departments) {
+    if (!elements.departmentsCardsContainer) return;
+    if (departments.length === 0) {
+        elements.departmentsCardsContainer.innerHTML = '<p class="text-muted">No departments created yet.</p>';
+        return;
+    }
+
+    const showDelete = isAdmin();
+
+    elements.departmentsCardsContainer.innerHTML = departments.map(d => `
+        <div class="dept-card">
+            <div class="dept-card-top">
+                <span class="dept-badge-code">${escapeHtml(d.code)}</span>
+                ${showDelete ? `
+                <button class="icon-btn danger" onclick="confirmDeleteDepartment(${d.id}, '${escapeHtml(d.name)}')" title="Delete Department (Admin only)">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                </button>` : ''}
+            </div>
+            <h4>${escapeHtml(d.name)}</h4>
+            <p>${escapeHtml(d.description || 'No description provided.')}</p>
+            <div class="dept-card-meta">
+                <span>📍 ${escapeHtml(d.location || 'HQ')}</span>
+                <strong>${d.employeeCount || 0} Staff</strong>
+            </div>
+        </div>
+    `).join('');
+}
+
+function populateDepartmentDropdowns(departments) {
+    const currentFilterVal = elements.filterDepartment.value;
+    elements.filterDepartment.innerHTML = '<option value="">All Departments</option>' +
+        departments.map(d => `<option value="${d.id}">${escapeHtml(d.name)} (${escapeHtml(d.code)})</option>`).join('');
+    elements.filterDepartment.value = currentFilterVal;
+
+    const empDeptSelect = document.getElementById('emp-department');
+    if (empDeptSelect) {
+        empDeptSelect.innerHTML = '<option value="">Select Department...</option>' +
+            departments.map(d => `<option value="${d.id}">${escapeHtml(d.name)} (${escapeHtml(d.code)})</option>`).join('');
+    }
+}
+
+// Fetch & Render Employees
+async function loadEmployees() {
+    try {
+        elements.employeesTableBody.innerHTML = `<tr><td colspan="7" class="loading-cell">Loading employees...</td></tr>`;
+
+        const params = new URLSearchParams({
+            page: state.pagination.page,
+            size: state.pagination.size,
+            sortBy: state.pagination.sortBy,
+            direction: state.pagination.direction
+        });
+
+        if (state.filters.keyword) params.append('keyword', state.filters.keyword);
+        if (state.filters.departmentId) params.append('departmentId', state.filters.departmentId);
+        if (state.filters.status) params.append('status', state.filters.status);
+
+        const res = await authFetch(`${API_BASE}/employees?${params.toString()}`);
+        const json = await res.json();
+
+        if (json.success) {
+            const pageData = json.data;
+            state.employees = pageData.content || [];
+            state.pagination.totalPages = pageData.totalPages;
+            state.pagination.totalElements = pageData.totalElements;
+
+            renderEmployeesTable(state.employees);
+            updatePaginationUI(pageData);
+        }
+    } catch (err) {
+        console.error('Failed to load employees:', err);
+        elements.employeesTableBody.innerHTML = `<tr><td colspan="7" class="empty-cell">Failed to load employees. Please check authentication and backend.</td></tr>`;
+    }
+}
+
+function renderEmployeesTable(employees) {
+    if (employees.length === 0) {
+        elements.employeesTableBody.innerHTML = `
+            <tr>
+                <td colspan="7" class="empty-cell">
+                    <p style="font-size: 1rem; color: #475569; margin-bottom: 0.5rem;">No employees found</p>
+                    <span style="font-size: 0.85rem;">Try adjusting your search criteria or add a new employee.</span>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    const canEdit = canWriteEmployees();
+    const canDel = canDelete();
+
+    elements.employeesTableBody.innerHTML = employees.map(emp => {
+        const initials = ((emp.firstName?.[0] || '') + (emp.lastName?.[0] || '')).toUpperCase();
+        const statusClass = (emp.status || 'ACTIVE').toLowerCase();
+        const formattedStatus = (emp.status || 'ACTIVE').replace('_', ' ');
+        const formattedType = (emp.employmentType || 'FULL_TIME').replace('_', ' ');
+
+        return `
+            <tr>
+                <td>
+                    <div class="user-cell">
+                        <div class="avatar">${initials}</div>
+                        <div>
+                            <div class="user-name">${escapeHtml(emp.fullName)}</div>
+                            <div class="user-email">${escapeHtml(emp.email)}</div>
+                        </div>
+                    </div>
+                </td>
+                <td>
+                    <span class="badge-dept">${escapeHtml(emp.departmentName || 'General')}</span>
+                </td>
+                <td>${escapeHtml(emp.jobTitle)}</td>
+                <td>
+                    <span class="badge-type">${formattedType}</span>
+                </td>
+                <td>
+                    <span class="salary-text">${formatCurrency(emp.salary)}</span>
+                </td>
+                <td>
+                    <span class="badge badge-${statusClass}">${formattedStatus}</span>
+                </td>
+                <td class="text-right">
+                    <div class="row-actions">
+                        <button class="icon-btn" onclick="viewEmployeeProfile(${emp.id})" title="View Details">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                <circle cx="12" cy="12" r="3"></circle>
+                            </svg>
+                        </button>
+                        ${canEdit ? `
+                        <button class="icon-btn" onclick="editEmployee(${emp.id})" title="Edit Employee">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                            </svg>
+                        </button>` : ''}
+                        ${canDel ? `
+                        <button class="icon-btn danger" onclick="confirmDeleteEmployee(${emp.id}, '${escapeHtml(emp.fullName)}')" title="Delete Employee (Admin only)">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                            </svg>
+                        </button>` : ''}
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function updatePaginationUI(pageData) {
+    const total = pageData.totalElements;
+    const size = pageData.size;
+    const page = pageData.number;
+    const totalPages = pageData.totalPages;
+
+    const start = total === 0 ? 0 : page * size + 1;
+    const end = Math.min((page + 1) * size, total);
+
+    elements.paginationInfo.textContent = `Showing ${start}-${end} of ${total} employees`;
+    elements.pageDisplay.textContent = `Page ${page + 1} of ${Math.max(totalPages, 1)}`;
+
+    elements.btnPrevPage.disabled = page === 0;
+    elements.btnNextPage.disabled = page >= totalPages - 1 || totalPages === 0;
+}
+
+// Modal Handlers
+function openEmployeeModal(emp = null) {
+    if (!canWriteEmployees()) {
+        showToast('Access Denied: Managers or Admins only', 'error');
+        return;
+    }
+    elements.formEmployee.reset();
+    document.getElementById('emp-id').value = '';
+
+    if (emp) {
+        elements.modalEmployeeTitle.textContent = 'Edit Employee';
+        document.getElementById('emp-id').value = emp.id;
+        document.getElementById('emp-firstname').value = emp.firstName || '';
+        document.getElementById('emp-lastname').value = emp.lastName || '';
+        document.getElementById('emp-email').value = emp.email || '';
+        document.getElementById('emp-phone').value = emp.phone || '';
+        document.getElementById('emp-department').value = emp.departmentId || '';
+        document.getElementById('emp-jobtitle').value = emp.jobTitle || '';
+        document.getElementById('emp-salary').value = emp.salary || '';
+        document.getElementById('emp-hiredate').value = emp.hireDate || '';
+        document.getElementById('emp-type').value = emp.employmentType || 'FULL_TIME';
+        document.getElementById('emp-status').value = emp.status || 'ACTIVE';
+        document.getElementById('emp-address').value = emp.address || '';
+    } else {
+        elements.modalEmployeeTitle.textContent = 'Add New Employee';
+        document.getElementById('emp-hiredate').valueAsDate = new Date();
+    }
+
+    elements.modalEmployee.classList.add('open');
+}
+
+function openDepartmentModal(dept = null) {
+    if (!canDelete()) {
+        showToast('Access Denied: Only Admins can manage departments', 'error');
+        return;
+    }
+    elements.formDepartment.reset();
+    document.getElementById('dept-id').value = '';
+
+    if (dept) {
+        elements.modalDeptTitle.textContent = 'Edit Department';
+        document.getElementById('dept-id').value = dept.id;
+        document.getElementById('dept-name').value = dept.name || '';
+        document.getElementById('dept-code').value = dept.code || '';
+        document.getElementById('dept-location').value = dept.location || '';
+        document.getElementById('dept-description').value = dept.description || '';
+    } else {
+        elements.modalDeptTitle.textContent = 'Add Department';
+    }
+
+    elements.modalDept.classList.add('open');
+}
+
+function closeModal(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) modal.classList.remove('open');
+}
+
+// View Employee Profile
+async function viewEmployeeProfile(id) {
+    try {
+        state.activeEmployeeId = id;
+        const res = await authFetch(`${API_BASE}/employees/${id}`);
+        const json = await res.json();
+        if (json.success) {
+            const emp = json.data;
+            const initials = ((emp.firstName?.[0] || '') + (emp.lastName?.[0] || '')).toUpperCase();
+            const formattedStatus = (emp.status || 'ACTIVE').replace('_', ' ');
+            const formattedType = (emp.employmentType || 'FULL_TIME').replace('_', ' ');
+
+            elements.viewEmployeeContent.innerHTML = `
+                <div class="profile-view-header">
+                    <div class="profile-avatar-lg">${initials}</div>
+                    <div>
+                        <h2 style="font-size: 1.35rem; font-weight: 700;">${escapeHtml(emp.fullName)}</h2>
+                        <p style="color: #475569; font-size: 0.95rem;">${escapeHtml(emp.jobTitle)} • <span class="badge-dept">${escapeHtml(emp.departmentName)}</span></p>
+                    </div>
+                </div>
+                <div class="profile-grid">
+                    <div class="profile-field">
+                        <label>Email Address</label>
+                        <div>${escapeHtml(emp.email)}</div>
+                    </div>
+                    <div class="profile-field">
+                        <label>Phone Number</label>
+                        <div>${escapeHtml(emp.phone || 'N/A')}</div>
+                    </div>
+                    <div class="profile-field">
+                        <label>Annual Salary</label>
+                        <div style="font-weight: 700; color: #10b981;">${formatCurrency(emp.salary)} / year</div>
+                    </div>
+                    <div class="profile-field">
+                        <label>Hire Date</label>
+                        <div>${emp.hireDate || 'N/A'}</div>
+                    </div>
+                    <div class="profile-field">
+                        <label>Employment Type</label>
+                        <div><span class="badge-type">${formattedType}</span></div>
+                    </div>
+                    <div class="profile-field">
+                        <label>Current Status</label>
+                        <div><span class="badge badge-${(emp.status || 'ACTIVE').toLowerCase()}">${formattedStatus}</span></div>
+                    </div>
+                    <div class="profile-field" style="grid-column: span 2;">
+                        <label>Office / Residential Address</label>
+                        <div>${escapeHtml(emp.address || 'No address provided')}</div>
+                    </div>
+                </div>
+            `;
+            elements.modalViewEmployee.classList.add('open');
+        }
+    } catch (err) {
+        console.error('Error fetching employee details:', err);
+        showToast('Could not load employee details', 'error');
+    }
+}
+
+// Edit Trigger
+function editEmployee(id) {
+    if (!canWriteEmployees()) {
+        showToast('Access Denied: You need Manager or Admin role to edit records', 'error');
+        return;
+    }
+    const emp = state.employees.find(e => e.id === id);
+    if (emp) {
+        openEmployeeModal(emp);
+    } else {
+        authFetch(`${API_BASE}/employees/${id}`)
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) openEmployeeModal(res.data);
+            });
+    }
+}
+
+// Delete Confirmation
+function confirmDeleteEmployee(id, name) {
+    if (!canDelete()) {
+        showToast('Access Denied: Only Admins are authorized to delete employees', 'error');
+        return;
+    }
+    state.activeDeleteTarget = { type: 'employee', id, name };
+    elements.deleteMessage.innerHTML = `Are you sure you want to delete employee <strong>${escapeHtml(name)}</strong>?`;
+    elements.modalDelete.classList.add('open');
+}
+
+function confirmDeleteDepartment(id, name) {
+    if (!canDelete()) {
+        showToast('Access Denied: Only Admins can delete departments', 'error');
+        return;
+    }
+    state.activeDeleteTarget = { type: 'department', id, name };
+    elements.deleteMessage.innerHTML = `Are you sure you want to delete department <strong>${escapeHtml(name)}</strong>? Ensure no employees are assigned to it.`;
+    elements.modalDelete.classList.add('open');
+}
+
+async function handleConfirmDelete() {
+    if (!state.activeDeleteTarget) return;
+    const { type, id, name } = state.activeDeleteTarget;
+
+    try {
+        const endpoint = type === 'employee' ? `${API_BASE}/employees/${id}` : `${API_BASE}/departments/${id}`;
+        const res = await authFetch(endpoint, { method: 'DELETE' });
+        const json = await res.json();
+
+        if (res.ok && json.success) {
+            showToast(`${type === 'employee' ? 'Employee' : 'Department'} "${name}" deleted successfully`, 'success');
+            closeModal('modal-delete');
+            if (type === 'employee') {
+                loadEmployees();
+                loadDashboardStats();
+            } else {
+                loadDepartments();
+                loadDashboardStats();
+            }
+        } else {
+            showToast(json.message || 'Deletion failed', 'error');
+        }
+    } catch (err) {
+        console.error('Delete error:', err);
+    }
+}
+
+// Save Employee Form
+async function handleEmployeeFormSubmit(e) {
+    e.preventDefault();
+
+    const id = document.getElementById('emp-id').value;
+    const payload = {
+        firstName: document.getElementById('emp-firstname').value.trim(),
+        lastName: document.getElementById('emp-lastname').value.trim(),
+        email: document.getElementById('emp-email').value.trim(),
+        phone: document.getElementById('emp-phone').value.trim(),
+        departmentId: parseInt(document.getElementById('emp-department').value),
+        jobTitle: document.getElementById('emp-jobtitle').value.trim(),
+        salary: parseFloat(document.getElementById('emp-salary').value),
+        hireDate: document.getElementById('emp-hiredate').value,
+        employmentType: document.getElementById('emp-type').value,
+        status: document.getElementById('emp-status').value,
+        address: document.getElementById('emp-address').value.trim()
+    };
+
+    try {
+        const isEdit = !!id;
+        const url = isEdit ? `${API_BASE}/employees/${id}` : `${API_BASE}/employees`;
+        const method = isEdit ? 'PUT' : 'POST';
+
+        const res = await authFetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        const json = await res.json();
+
+        if (res.ok && json.success) {
+            showToast(json.message || (isEdit ? 'Employee updated' : 'Employee created'), 'success');
+            closeModal('modal-employee');
+            loadEmployees();
+            loadDashboardStats();
+        } else {
+            const errorMsg = json.validationErrors ?
+                Object.values(json.validationErrors).join(', ') :
+                (json.message || 'Operation failed');
+            showToast(errorMsg, 'error');
+        }
+    } catch (err) {
+        console.error('Save error:', err);
+    }
+}
+
+// Save Department Form
+async function handleDepartmentFormSubmit(e) {
+    e.preventDefault();
+
+    const id = document.getElementById('dept-id').value;
+    const payload = {
+        name: document.getElementById('dept-name').value.trim(),
+        code: document.getElementById('dept-code').value.trim().toUpperCase(),
+        location: document.getElementById('dept-location').value.trim(),
+        description: document.getElementById('dept-description').value.trim()
+    };
+
+    try {
+        const isEdit = !!id;
+        const url = isEdit ? `${API_BASE}/departments/${id}` : `${API_BASE}/departments`;
+        const method = isEdit ? 'PUT' : 'POST';
+
+        const res = await authFetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        const json = await res.json();
+
+        if (res.ok && json.success) {
+            showToast(json.message || (isEdit ? 'Department updated' : 'Department created'), 'success');
+            closeModal('modal-department');
+            loadDepartments();
+            loadDashboardStats();
+        } else {
+            showToast(json.message || 'Failed to save department', 'error');
+        }
+    } catch (err) {
+        console.error('Department save error:', err);
+    }
+}
+
+// Utilities
+function formatCurrency(num) {
+    if (num === null || num === undefined) return '$0';
+    return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        maximumFractionDigits: 0
+    }).format(num);
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function showToast(message, type = 'info') {
+    if (!elements.toastContainer) return;
+
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.innerHTML = `<span>${escapeHtml(message)}</span>`;
+
+    elements.toastContainer.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+    }, 4000);
+}
+
+// Global scope bindings for HTML onclick handlers
+window.viewEmployeeProfile = viewEmployeeProfile;
+window.editEmployee = editEmployee;
+window.confirmDeleteEmployee = confirmDeleteEmployee;
+window.confirmDeleteDepartment = confirmDeleteDepartment;
+window.doLogin = doLogin;

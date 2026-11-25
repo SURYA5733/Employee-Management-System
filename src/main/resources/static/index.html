@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Employee Management System</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-layout">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="brand-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                    </svg>
+                </div>
+                <div class="brand-text">
+                    <h2>StaffPulse</h2>
+                    <span>EMS Portal</span>
+                </div>
+            </div>
+
+            <nav class="nav-menu">
+                <button class="nav-item active" data-tab="dashboard">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="7" height="7"></rect>
+                        <rect x="14" y="3" width="7" height="7"></rect>
+                        <rect x="14" y="14" width="7" height="7"></rect>
+                        <rect x="3" y="14" width="7" height="7"></rect>
+                    </svg>
+                    <span>Dashboard</span>
+                </button>
+                <button class="nav-item" data-tab="employees">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="12" cy="7" r="4"></circle>
+                    </svg>
+                    <span>Employees</span>
+                </button>
+                <button class="nav-item" data-tab="departments">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 21h18"></path>
+                        <path d="M5 21V7l8-4v18"></path>
+                        <path d="M19 21V11l-6-3"></path>
+                        <path d="M9 9h1"></path>
+                        <path d="M9 13h1"></path>
+                        <path d="M9 17h1"></path>
+                    </svg>
+                    <span>Departments</span>
+                </button>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="db-pill">
+                    <span class="status-indicator"></span>
+                    <span>MySQL (ems_db : 3306)</span>
+                </div>
+                <div class="h2-link">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+                        <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
+                        <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
+                    </svg>
+                    Spring Boot 3.3.5
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Header Bar -->
+            <header class="topbar">
+                <div class="page-title">
+                    <h1 id="page-heading">Dashboard Overview</h1>
+                    <p id="page-subheading">Manage team members, roles, and department performance</p>
+                </div>
+                <div class="topbar-actions">
+                    <!-- User RBAC Badge & Logout -->
+                    <div class="user-auth-pill" id="user-auth-pill">
+                        <div class="user-avatar-sm" id="auth-user-avatar">AD</div>
+                        <div class="user-auth-info">
+                            <span class="user-auth-name" id="auth-user-name">admin</span>
+                            <span class="user-role-badge badge-admin" id="auth-user-role">ADMIN</span>
+                        </div>
+                        <button class="btn-logout" id="btn-logout" title="Switch User / Logout">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                                <polyline points="16 17 21 12 16 7"></polyline>
+                                <line x1="21" y1="12" x2="9" y2="12"></line>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <button class="btn btn-secondary" id="btn-export-csv">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                        Export CSV
+                    </button>
+                    <button class="btn btn-primary" id="btn-open-add-modal">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                        Add Employee
+                    </button>
+                </div>
+            </header>
+
+            <!-- TAB 1: DASHBOARD -->
+            <section id="tab-dashboard" class="tab-content active">
+                <!-- KPI Stat Cards -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <span class="stat-label">Total Employees</span>
+                            <div class="stat-badge blue">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                    <circle cx="9" cy="7" r="4"></circle>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="stat-value" id="stat-total-emp">0</div>
+                        <div class="stat-subtext">Active staff members across departments</div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <span class="stat-label">Active Employees</span>
+                            <div class="stat-badge green">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="stat-value text-green" id="stat-active-emp">0</div>
+                        <div class="stat-subtext"><span id="stat-leave-emp">0</span> on leave</div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <span class="stat-label">Departments</span>
+                            <div class="stat-badge purple">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M3 21h18"></path>
+                                    <path d="M5 21V7l8-4v18"></path>
+                                    <path d="M19 21V11l-6-3"></path>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="stat-value" id="stat-total-dept">0</div>
+                        <div class="stat-subtext">Operational organizational units</div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <span class="stat-label">Average Salary</span>
+                            <div class="stat-badge emerald">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="12" y1="1" x2="12" y2="23"></line>
+                                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="stat-value" id="stat-avg-salary">$0</div>
+                        <div class="stat-subtext">Total payroll: <span id="stat-total-payroll">$0</span></div>
+                    </div>
+                </div>
+
+                <!-- Department Breakdown & Recent Activity -->
+                <div class="dashboard-grid">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Department Headcount</h3>
+                            <span class="badge-neutral">Breakdown</span>
+                        </div>
+                        <div class="card-body" id="department-bars-container">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Quick Actions & System Info</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="quick-actions-list">
+                                <button class="action-tile" id="tile-add-emp">
+                                    <div class="tile-icon bg-blue-soft">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                            <circle cx="8.5" cy="7" r="4"></circle>
+                                            <line x1="20" y1="8" x2="20" y2="14"></line>
+                                            <line x1="23" y1="11" x2="17" y2="11"></line>
+                                        </svg>
+                                    </div>
+                                    <div class="tile-info">
+                                        <h4>Onboard New Employee</h4>
+                                        <p>Add staff details, role, department & compensation</p>
+                                    </div>
+                                </button>
+
+                                <button class="action-tile" id="tile-add-dept">
+                                    <div class="tile-icon bg-purple-soft">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M3 21h18"></path>
+                                            <path d="M5 21V7l8-4v18"></path>
+                                            <line x1="18" y1="11" x2="22" y2="11"></line>
+                                            <line x1="20" y1="9" x2="20" y2="13"></line>
+                                        </svg>
+                                    </div>
+                                    <div class="tile-info">
+                                        <h4>Add Department</h4>
+                                        <p>Create a department code, title & office location</p>
+                                    </div>
+                                </button>
+
+                                <div class="system-summary-box">
+                                    <div class="system-item">
+                                        <span>Backend</span>
+                                        <strong>Spring Boot 3.3.5 / Java 17+</strong>
+                                    </div>
+                                    <div class="system-item">
+                                        <span>Persistence</span>
+                                        <strong>Spring Data JPA / Hibernate</strong>
+                                    </div>
+                                    <div class="system-item">
+                                        <span>Database</span>
+                                        <strong>MySQL 8+ (ems_db)</strong>
+                                    </div>
+                                    <div class="system-item">
+                                        <span>API Design</span>
+                                        <strong>RESTful with validation & DTOs</strong>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 2: EMPLOYEES DIRECTORY -->
+            <section id="tab-employees" class="tab-content">
+                <div class="table-container-card">
+                    <!-- Filters and Search Toolbar -->
+                    <div class="toolbar">
+                        <div class="search-box">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="11" cy="11" r="8"></circle>
+                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                            </svg>
+                            <input type="text" id="input-search" placeholder="Search by name, email, or role...">
+                        </div>
+
+                        <div class="filter-controls">
+                            <select id="filter-department">
+                                <option value="">All Departments</option>
+                            </select>
+
+                            <select id="filter-status">
+                                <option value="">All Statuses</option>
+                                <option value="ACTIVE">Active</option>
+                                <option value="ON_LEAVE">On Leave</option>
+                                <option value="TERMINATED">Terminated</option>
+                            </select>
+
+                            <select id="filter-sort">
+                                <option value="id,desc">Newest First</option>
+                                <option value="id,asc">Oldest First</option>
+                                <option value="firstName,asc">Name (A-Z)</option>
+                                <option value="salary,desc">Salary (High to Low)</option>
+                                <option value="salary,asc">Salary (Low to High)</option>
+                            </select>
+
+                            <button class="btn btn-outline" id="btn-refresh-employees" title="Refresh">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Employees Table -->
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Employee</th>
+                                    <th>Department</th>
+                                    <th>Job Title</th>
+                                    <th>Employment</th>
+                                    <th>Salary</th>
+                                    <th>Status</th>
+                                    <th class="text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="employees-table-body">
+                                <tr>
+                                    <td colspan="7" class="loading-cell">Loading employees...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Pagination Controls -->
+                    <div class="pagination-footer">
+                        <div class="pagination-info" id="pagination-info">
+                            Showing 0 of 0 employees
+                        </div>
+                        <div class="pagination-buttons">
+                            <button class="page-btn" id="btn-prev-page" disabled>Previous</button>
+                            <span class="page-current" id="page-display">Page 1 of 1</span>
+                            <button class="page-btn" id="btn-next-page" disabled>Next</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 3: DEPARTMENTS -->
+            <section id="tab-departments" class="tab-content">
+                <div class="section-actions-bar">
+                    <div>
+                        <h3>Organization Departments</h3>
+                        <p class="text-muted">Manage company business units and organizational structures</p>
+                    </div>
+                    <button class="btn btn-primary" id="btn-open-dept-modal">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                        Add Department
+                    </button>
+                </div>
+
+                <div class="departments-grid" id="departments-cards-container">
+                    <!-- Populated dynamically -->
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- MODAL: ADD / EDIT EMPLOYEE -->
+    <div class="modal-backdrop" id="modal-employee">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <h3 id="modal-employee-title">Add New Employee</h3>
+                <button class="modal-close" data-close-modal="modal-employee">&times;</button>
+            </div>
+            <form id="form-employee">
+                <input type="hidden" id="emp-id">
+                <div class="modal-body">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="emp-firstname">First Name <span class="required">*</span></label>
+                            <input type="text" id="emp-firstname" required placeholder="e.g. Sarah">
+                        </div>
+                        <div class="form-group">
+                            <label for="emp-lastname">Last Name <span class="required">*</span></label>
+                            <input type="text" id="emp-lastname" required placeholder="e.g. Connor">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="emp-email">Email Address <span class="required">*</span></label>
+                            <input type="email" id="emp-email" required placeholder="s.connor@company.com">
+                        </div>
+                        <div class="form-group">
+                            <label for="emp-phone">Phone Number</label>
+                            <input type="tel" id="emp-phone" placeholder="+1 (555) 012-3456">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="emp-department">Department <span class="required">*</span></label>
+                            <select id="emp-department" required>
+                                <option value="">Select Department...</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="emp-jobtitle">Job Title <span class="required">*</span></label>
+                            <input type="text" id="emp-jobtitle" required placeholder="e.g. Senior Software Engineer">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="emp-salary">Annual Salary ($) <span class="required">*</span></label>
+                            <input type="number" id="emp-salary" step="100" min="1" required placeholder="85000">
+                        </div>
+                        <div class="form-group">
+                            <label for="emp-hiredate">Hire Date <span class="required">*</span></label>
+                            <input type="date" id="emp-hiredate" required>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="emp-type">Employment Type</label>
+                            <select id="emp-type">
+                                <option value="FULL_TIME">Full Time</option>
+                                <option value="PART_TIME">Part Time</option>
+                                <option value="CONTRACT">Contract</option>
+                                <option value="INTERN">Intern</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="emp-status">Status</label>
+                            <select id="emp-status">
+                                <option value="ACTIVE">Active</option>
+                                <option value="ON_LEAVE">On Leave</option>
+                                <option value="TERMINATED">Terminated</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="emp-address">Office / Residential Address</label>
+                        <input type="text" id="emp-address" placeholder="123 Corporate Blvd, Suite 400, City, State">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-close-modal="modal-employee">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="btn-save-employee">Save Employee</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: ADD / EDIT DEPARTMENT -->
+    <div class="modal-backdrop" id="modal-department">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <h3 id="modal-dept-title">Add Department</h3>
+                <button class="modal-close" data-close-modal="modal-department">&times;</button>
+            </div>
+            <form id="form-department">
+                <input type="hidden" id="dept-id">
+                <div class="modal-body">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="dept-name">Department Name <span class="required">*</span></label>
+                            <input type="text" id="dept-name" required placeholder="e.g. Data Science">
+                        </div>
+                        <div class="form-group">
+                            <label for="dept-code">Code (Short ID) <span class="required">*</span></label>
+                            <input type="text" id="dept-code" required placeholder="e.g. DS" maxlength="10">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="dept-location">Office Location</label>
+                        <input type="text" id="dept-location" placeholder="e.g. Floor 3, East Wing">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="dept-description">Description</label>
+                        <textarea id="dept-description" rows="3" placeholder="Brief summary of department responsibilities"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-close-modal="modal-department">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="btn-save-department">Save Department</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: VIEW EMPLOYEE DETAILS -->
+    <div class="modal-backdrop" id="modal-view-employee">
+        <div class="modal-dialog modal-dialog-lg">
+            <div class="modal-header">
+                <h3>Employee Profile</h3>
+                <button class="modal-close" data-close-modal="modal-view-employee">&times;</button>
+            </div>
+            <div class="modal-body" id="view-employee-content">
+                <!-- Dynamically loaded -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-close-modal="modal-view-employee">Close</button>
+                <button type="button" class="btn btn-primary" id="btn-edit-from-view">Edit Profile</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: DELETE CONFIRMATION -->
+    <div class="modal-backdrop" id="modal-delete">
+        <div class="modal-dialog modal-dialog-sm">
+            <div class="modal-header">
+                <h3>Confirm Deletion</h3>
+                <button class="modal-close" data-close-modal="modal-delete">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p id="delete-message">Are you sure you want to delete this record? This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-close-modal="modal-delete">Cancel</button>
+                <button type="button" class="btn btn-danger" id="btn-confirm-delete">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: LOGIN / AUTHENTICATION -->
+    <div class="modal-backdrop" id="modal-login">
+        <div class="modal-dialog modal-dialog-sm">
+            <div class="modal-header">
+                <div class="brand-auth-header">
+                    <div class="brand-icon">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3>Sign In to StaffPulse</h3>
+                        <p style="font-size: 0.8rem; color: #64748b;">User-Based Access Control (UBAC / RBAC)</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-body">
+                <!-- 1-Click Quick Demo Login Buttons -->
+                <div class="quick-demo-login-box">
+                    <span class="quick-demo-title">⚡ Quick Login (Select Role):</span>
+                    <div class="quick-roles-grid">
+                        <button type="button" class="btn-role-quick admin" id="btn-quick-admin">
+                            <strong>👑 Admin</strong>
+                            <span>admin123 (Full CRUD)</span>
+                        </button>
+                        <button type="button" class="btn-role-quick manager" id="btn-quick-manager">
+                            <strong>💼 Manager</strong>
+                            <span>manager123 (Add/Edit)</span>
+                        </button>
+                        <button type="button" class="btn-role-quick employee" id="btn-quick-employee">
+                            <strong>👤 Employee</strong>
+                            <span>user123 (View Only)</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="divider-text"><span>or enter credentials</span></div>
+
+                <form id="form-login">
+                    <div class="form-group">
+                        <label for="login-username">Username or Email</label>
+                        <input type="text" id="login-username" required placeholder="admin / manager / user">
+                    </div>
+                    <div class="form-group">
+                        <label for="login-password">Password</label>
+                        <input type="password" id="login-password" required placeholder="••••••••">
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 0.5rem;" id="btn-submit-login">Sign In</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script src="js/app.js"></script>
+</body>
+</html>
