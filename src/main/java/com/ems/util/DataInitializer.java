@@ -5,6 +5,7 @@ import com.ems.repository.DepartmentRepository;
 import com.ems.repository.EmployeeRepository;
 import com.ems.repository.UserRepository;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
@@ -19,19 +20,29 @@ public class DataInitializer implements CommandLineRunner {
     private final EmployeeRepository employeeRepository;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final JdbcTemplate jdbcTemplate;
 
     public DataInitializer(DepartmentRepository departmentRepository,
                            EmployeeRepository employeeRepository,
                            UserRepository userRepository,
-                           PasswordEncoder passwordEncoder) {
+                           PasswordEncoder passwordEncoder,
+                           JdbcTemplate jdbcTemplate) {
         this.departmentRepository = departmentRepository;
         this.employeeRepository = employeeRepository;
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     @Override
     public void run(String... args) {
+        // Upgrade legacy column in MySQL if it was created as a restricted ENUM
+        try {
+            jdbcTemplate.execute("ALTER TABLE user_roles MODIFY COLUMN role VARCHAR(50) NOT NULL");
+        } catch (Exception ignored) {
+            // Safe to ignore on H2 or if already VARCHAR
+        }
+
         // Seed default departments & employees if empty
         if (departmentRepository.count() == 0) {
             seedDepartmentsAndEmployees();
