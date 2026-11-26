@@ -3,6 +3,7 @@ package com.ems.util;
 import com.ems.model.*;
 import com.ems.repository.DepartmentRepository;
 import com.ems.repository.EmployeeRepository;
+import com.ems.repository.LeaveRepository;
 import com.ems.repository.UserRepository;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.*;
 
 @Component
@@ -19,17 +21,20 @@ public class DataInitializer implements CommandLineRunner {
     private final DepartmentRepository departmentRepository;
     private final EmployeeRepository employeeRepository;
     private final UserRepository userRepository;
+    private final LeaveRepository leaveRepository;
     private final PasswordEncoder passwordEncoder;
     private final JdbcTemplate jdbcTemplate;
 
     public DataInitializer(DepartmentRepository departmentRepository,
                            EmployeeRepository employeeRepository,
                            UserRepository userRepository,
+                           LeaveRepository leaveRepository,
                            PasswordEncoder passwordEncoder,
                            JdbcTemplate jdbcTemplate) {
         this.departmentRepository = departmentRepository;
         this.employeeRepository = employeeRepository;
         this.userRepository = userRepository;
+        this.leaveRepository = leaveRepository;
         this.passwordEncoder = passwordEncoder;
         this.jdbcTemplate = jdbcTemplate;
     }
@@ -50,6 +55,11 @@ public class DataInitializer implements CommandLineRunner {
 
         // Ensure all default role accounts exist (Admin, HR, Manager, Employee)
         seedUsers();
+
+        // Seed sample leave requests if empty
+        if (leaveRepository.count() == 0) {
+            seedSampleLeaves();
+        }
     }
 
     private void seedDepartmentsAndEmployees() {
@@ -185,6 +195,49 @@ public class DataInitializer implements CommandLineRunner {
             );
             employeeRepository.findAll().stream().findFirst().ifPresent(employeeUser::setEmployee);
             userRepository.save(employeeUser);
+        } else {
+            userRepository.findByUsername("user").ifPresent(usr -> {
+                if (usr.getEmployee() == null) {
+                    employeeRepository.findAll().stream().findFirst().ifPresent(emp -> {
+                        usr.setEmployee(emp);
+                        userRepository.save(usr);
+                    });
+                }
+            });
+        }
+    }
+
+    private void seedSampleLeaves() {
+        List<Employee> employees = employeeRepository.findAll();
+        if (employees.isEmpty()) return;
+
+        Employee emp1 = employees.get(0);
+        LeaveRequest req1 = new LeaveRequest(
+                emp1,
+                LeaveType.CASUAL,
+                LocalDate.now().plusDays(2),
+                LocalDate.now().plusDays(4),
+                "Family wedding celebration"
+        );
+        leaveRepository.save(req1);
+
+        if (employees.size() > 1) {
+            Employee emp2 = employees.get(1);
+            LeaveRequest req2 = new LeaveRequest(
+                    emp2,
+                    LeaveType.SICK,
+                    LocalDate.now().minusDays(1),
+                    LocalDate.now().plusDays(2),
+                    "Flu recovery and medical rest"
+            );
+            req2.setStatus(LeaveStatus.APPROVED);
+            req2.setReviewComments("Approved. Take care and get well soon.");
+            userRepository.findByUsername("hr").ifPresent(req2::setReviewedBy);
+            req2.setReviewedAt(LocalDateTime.now().minusDays(1));
+            leaveRepository.save(req2);
+
+            emp2.setStatus(EmployeeStatus.ON_LEAVE);
+            employeeRepository.save(emp2);
         }
     }
 }

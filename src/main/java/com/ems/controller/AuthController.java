@@ -107,6 +107,9 @@ public class AuthController {
                         usr.setPassword(passwordEncoder.encode("user123"));
                         usr.setEnabled(true);
                         usr.setRoles(new HashSet<>(Collections.singletonList(Role.ROLE_EMPLOYEE)));
+                        if (usr.getEmployee() == null) {
+                            employeeRepository.findAll().stream().findFirst().ifPresent(usr::setEmployee);
+                        }
                         userRepository.save(usr);
                     },
                     () -> {

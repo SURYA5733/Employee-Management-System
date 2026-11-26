@@ -165,15 +165,41 @@ const elements = {
     modalDept: document.getElementById('modal-department'),
     modalViewEmployee: document.getElementById('modal-view-employee'),
     modalDelete: document.getElementById('modal-delete'),
+    modalApplyLeave: document.getElementById('modal-apply-leave'),
+    modalRejectLeave: document.getElementById('modal-reject-leave'),
 
     // Forms
     formEmployee: document.getElementById('form-employee'),
     formDepartment: document.getElementById('form-department'),
+    formApplyLeave: document.getElementById('form-apply-leave'),
+    formRejectLeave: document.getElementById('form-reject-leave'),
     modalEmployeeTitle: document.getElementById('modal-employee-title'),
     modalDeptTitle: document.getElementById('modal-dept-title'),
     btnConfirmDelete: document.getElementById('btn-confirm-delete'),
     deleteMessage: document.getElementById('delete-message'),
     viewEmployeeContent: document.getElementById('view-employee-content'),
+
+    // Leave Elements
+    navTabLeaves: document.getElementById('nav-tab-leaves'),
+    leavesSectionTitle: document.getElementById('leaves-section-title'),
+    leavesSectionSub: document.getElementById('leaves-section-sub'),
+    leaveAdminStatsContainer: document.getElementById('leave-admin-stats-container'),
+    statLeavePending: document.getElementById('stat-leave-pending'),
+    statLeaveOnleave: document.getElementById('stat-leave-onleave'),
+    statLeaveApproved: document.getElementById('stat-leave-approved'),
+    statLeaveRejected: document.getElementById('stat-leave-rejected'),
+    leaveFilterBar: document.getElementById('leave-filter-bar'),
+    filterLeaveStatus: document.getElementById('filter-leave-status'),
+    leavesTableBody: document.getElementById('leaves-table-body'),
+    btnOpenApplyLeaveModal: document.getElementById('btn-open-apply-leave-modal'),
+    leaveType: document.getElementById('leave-type'),
+    leaveStartDate: document.getElementById('leave-start-date'),
+    leaveEndDate: document.getElementById('leave-end-date'),
+    leaveDurationPreview: document.getElementById('leave-duration-preview'),
+    leaveDurationDays: document.getElementById('leave-duration-days'),
+    leaveReason: document.getElementById('leave-reason'),
+    rejectLeaveId: document.getElementById('reject-leave-id'),
+    rejectComments: document.getElementById('reject-comments'),
 
     // Buttons
     btnOpenAddModal: document.getElementById('btn-open-add-modal'),
@@ -270,6 +296,28 @@ function initEventListeners() {
             closeModal(modalId);
         });
     });
+
+    // Leave Management Listeners
+    if (elements.btnOpenApplyLeaveModal) {
+        elements.btnOpenApplyLeaveModal.addEventListener('click', openApplyLeaveModal);
+    }
+    if (elements.formApplyLeave) {
+        elements.formApplyLeave.addEventListener('submit', handleApplyLeaveSubmit);
+    }
+    if (elements.formRejectLeave) {
+        elements.formRejectLeave.addEventListener('submit', handleRejectLeaveSubmit);
+    }
+    if (elements.leaveStartDate) {
+        elements.leaveStartDate.addEventListener('change', updateDurationPreview);
+    }
+    if (elements.leaveEndDate) {
+        elements.leaveEndDate.addEventListener('change', updateDurationPreview);
+    }
+    if (elements.filterLeaveStatus) {
+        elements.filterLeaveStatus.addEventListener('change', () => {
+            if (!isEmployee()) loadAllLeaves();
+        });
+    }
 
     // Close on background click (except login modal when unauthenticated)
     document.querySelectorAll('.modal-backdrop').forEach(modal => {
@@ -524,6 +572,22 @@ function applyRbacUI() {
     if (elements.btnEditFromView) {
         elements.btnEditFromView.style.display = canEditEmployees() ? 'inline-flex' : 'none';
     }
+
+    // 10. Leave Tab View Configuration
+    if (elements.navTabLeaves) {
+        elements.navTabLeaves.style.display = 'flex';
+    }
+    if (isEmp) {
+        if (elements.leaveAdminStatsContainer) elements.leaveAdminStatsContainer.style.display = 'none';
+        if (elements.leaveFilterBar) elements.leaveFilterBar.style.display = 'none';
+        if (elements.leavesSectionTitle) elements.leavesSectionTitle.textContent = 'My Leave Applications';
+        if (elements.leavesSectionSub) elements.leavesSectionSub.textContent = 'Apply for leave, track approval status, or cancel pending requests';
+    } else {
+        if (elements.leaveAdminStatsContainer) elements.leaveAdminStatsContainer.style.display = 'grid';
+        if (elements.leaveFilterBar) elements.leaveFilterBar.style.display = 'flex';
+        if (elements.leavesSectionTitle) elements.leavesSectionTitle.textContent = 'Company Leave Requests & Approvals';
+        if (elements.leavesSectionSub) elements.leavesSectionSub.textContent = 'Review team leave applications, approve time off, and track absence records';
+    }
 }
 
 // Tab Switching
@@ -572,6 +636,17 @@ function switchTab(tabName) {
         elements.pageHeading.textContent = 'Departments Directory';
         elements.pageSubheading.textContent = 'Manage company business units and office locations';
         loadDepartments();
+    } else if (tabName === 'leaves') {
+        if (isEmployee()) {
+            elements.pageHeading.textContent = 'Leave Applications & Balance';
+            elements.pageSubheading.textContent = 'Submit new leave requests and track your approval status';
+            loadMyLeaves();
+        } else {
+            elements.pageHeading.textContent = 'Leave Approvals & Tracking';
+            elements.pageSubheading.textContent = 'Review team leave applications, approve time off, and track absence records';
+            loadLeaveStats();
+            loadAllLeaves();
+        }
     }
 }
 
@@ -1132,3 +1207,322 @@ window.editEmployee = editEmployee;
 window.confirmDeleteEmployee = confirmDeleteEmployee;
 window.confirmDeleteDepartment = confirmDeleteDepartment;
 window.doLogin = doLogin;
+
+// ===================================================================
+// Leave Management Functions
+// ===================================================================
+
+function openApplyLeaveModal() {
+    if (!elements.formApplyLeave) return;
+    elements.formApplyLeave.reset();
+
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+    const dayAfter = new Date(today);
+    dayAfter.setDate(today.getDate() + 3);
+
+    const minDateStr = today.toISOString().split('T')[0];
+    const tomorrowStr = tomorrow.toISOString().split('T')[0];
+    const dayAfterStr = dayAfter.toISOString().split('T')[0];
+
+    if (elements.leaveStartDate) {
+        elements.leaveStartDate.min = minDateStr;
+        elements.leaveStartDate.value = tomorrowStr;
+    }
+    if (elements.leaveEndDate) {
+        elements.leaveEndDate.min = minDateStr;
+        elements.leaveEndDate.value = dayAfterStr;
+    }
+
+    updateDurationPreview();
+    if (elements.modalApplyLeave) {
+        elements.modalApplyLeave.classList.add('open');
+    }
+}
+
+function updateDurationPreview() {
+    if (!elements.leaveStartDate || !elements.leaveEndDate || !elements.leaveDurationPreview) return;
+    const startVal = elements.leaveStartDate.value;
+    const endVal = elements.leaveEndDate.value;
+
+    if (!startVal || !endVal) {
+        elements.leaveDurationPreview.style.display = 'none';
+        return;
+    }
+
+    const start = new Date(startVal);
+    const end = new Date(endVal);
+
+    if (end < start) {
+        elements.leaveDurationPreview.style.display = 'block';
+        elements.leaveDurationPreview.style.borderColor = '#fca5a5';
+        elements.leaveDurationPreview.style.backgroundColor = '#fef2f2';
+        elements.leaveDurationPreview.style.color = '#b91c1c';
+        elements.leaveDurationPreview.innerHTML = '⚠️ End date cannot be before start date';
+        return;
+    }
+
+    const diffMs = end.getTime() - start.getTime();
+    const days = Math.round(diffMs / (1000 * 60 * 60 * 24)) + 1;
+
+    elements.leaveDurationPreview.style.display = 'flex';
+    elements.leaveDurationPreview.style.borderColor = '#7dd3fc';
+    elements.leaveDurationPreview.style.backgroundColor = '#f0f9ff';
+    elements.leaveDurationPreview.style.color = '#0369a1';
+    elements.leaveDurationPreview.innerHTML = `<span>📅 Calculated Duration:</span> <strong>${days}</strong> day${days > 1 ? 's' : ''}`;
+}
+
+async function handleApplyLeaveSubmit(e) {
+    e.preventDefault();
+    const leaveType = elements.leaveType.value;
+    const startDate = elements.leaveStartDate.value;
+    const endDate = elements.leaveEndDate.value;
+    const reason = elements.leaveReason.value.trim();
+
+    if (!startDate || !endDate) {
+        showToast('Please select both start date and end date', 'error');
+        return;
+    }
+
+    if (endDate < startDate) {
+        showToast('End date cannot be earlier than start date', 'error');
+        return;
+    }
+
+    if (!reason || reason.length < 5) {
+        showToast('Reason must be at least 5 characters long', 'error');
+        return;
+    }
+
+    try {
+        const res = await authFetch(`${API_BASE}/leaves`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                leaveType,
+                startDate,
+                endDate,
+                reason
+            })
+        });
+
+        const json = await res.json();
+        if (res.ok && json.success) {
+            showToast('Leave application submitted successfully!', 'success');
+            closeModal('modal-apply-leave');
+            if (state.currentTab === 'leaves') {
+                if (isEmployee()) {
+                    loadMyLeaves();
+                } else {
+                    loadLeaveStats();
+                    loadAllLeaves();
+                }
+            }
+        } else {
+            showToast(json.message || 'Failed to submit leave request', 'error');
+        }
+    } catch (err) {
+        console.error('Leave application error:', err);
+    }
+}
+
+async function loadLeaveStats() {
+    if (isEmployee()) return;
+    try {
+        const res = await authFetch(`${API_BASE}/leaves/stats`);
+        const json = await res.json();
+        if (json.success && json.data) {
+            const stats = json.data;
+            if (elements.statLeavePending) elements.statLeavePending.textContent = stats.totalPending || 0;
+            if (elements.statLeaveOnleave) elements.statLeaveOnleave.textContent = stats.currentlyOnLeave || 0;
+            if (elements.statLeaveApproved) elements.statLeaveApproved.textContent = stats.totalApproved || 0;
+            if (elements.statLeaveRejected) elements.statLeaveRejected.textContent = stats.totalRejected || 0;
+        }
+    } catch (err) {
+        console.error('Failed to load leave stats:', err);
+    }
+}
+
+async function loadAllLeaves() {
+    try {
+        const status = elements.filterLeaveStatus ? elements.filterLeaveStatus.value : '';
+        const url = status ? `${API_BASE}/leaves?status=${status}` : `${API_BASE}/leaves`;
+        const res = await authFetch(url);
+        const json = await res.json();
+        if (json.success) {
+            renderLeavesTable(json.data || [], false);
+        }
+    } catch (err) {
+        console.error('Failed to load company leaves:', err);
+    }
+}
+
+async function loadMyLeaves() {
+    try {
+        const res = await authFetch(`${API_BASE}/leaves/my-leaves`);
+        const json = await res.json();
+        if (json.success) {
+            renderLeavesTable(json.data || [], true);
+        }
+    } catch (err) {
+        console.error('Failed to load my leaves:', err);
+    }
+}
+
+function renderLeavesTable(leaves, isPersonalView) {
+    if (!elements.leavesTableBody) return;
+
+    if (!leaves || leaves.length === 0) {
+        elements.leavesTableBody.innerHTML = `
+            <tr>
+                <td colspan="8" class="text-center" style="padding: 2.5rem; color: #94a3b8;">
+                    ${isPersonalView ? 'You have not submitted any leave applications yet.' : 'No leave applications found.'}
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    elements.leavesTableBody.innerHTML = leaves.map(l => {
+        const empName = escapeHtml(l.employeeName || 'Staff Member');
+        const dept = escapeHtml(l.departmentName || 'General');
+        const type = escapeHtml(l.leaveType || 'CASUAL');
+        const status = l.status || 'PENDING';
+        const reason = escapeHtml(l.reason || '');
+        const duration = l.durationDays || 1;
+        const dateRange = `${l.startDate} &rarr; ${l.endDate}`;
+        const reviewerInfo = l.reviewedByUsername
+            ? `${escapeHtml(l.reviewedByUsername)}: ${escapeHtml(l.reviewComments || 'Approved')}`
+            : (l.status === 'PENDING' ? '<span style="color:#94a3b8; font-style:italic;">Pending Review</span>' : '-');
+
+        let actionsHtml = '-';
+        if (isPersonalView) {
+            if (status === 'PENDING') {
+                actionsHtml = `
+                    <button class="btn-action-cancel" onclick="cancelLeave(${l.id})" title="Cancel this pending request">
+                        Cancel Request
+                    </button>
+                `;
+            }
+        } else {
+            if (status === 'PENDING') {
+                actionsHtml = `
+                    <div class="btn-group-actions">
+                        <button class="btn-action-approve" onclick="approveLeave(${l.id})" title="Approve Leave">
+                            ✓ Approve
+                        </button>
+                        <button class="btn-action-reject" onclick="openRejectModal(${l.id})" title="Reject Leave">
+                            ✕ Reject
+                        </button>
+                    </div>
+                `;
+            }
+        }
+
+        return `
+            <tr>
+                <td>
+                    <div class="user-cell">
+                        <div class="user-avatar-sm" style="width: 32px; height: 32px; font-size: 0.75rem;">
+                            ${escapeHtml((empName[0] || 'E').toUpperCase())}
+                        </div>
+                        <div>
+                            <strong>${empName}</strong>
+                            <div style="font-size: 0.75rem; color: #64748b;">${dept}</div>
+                        </div>
+                    </div>
+                </td>
+                <td><span class="badge-leave-type">${type.toLowerCase()}</span></td>
+                <td style="font-size: 0.85rem; font-weight: 500;">${dateRange}</td>
+                <td><strong>${duration}</strong> day${duration > 1 ? 's' : ''}</td>
+                <td style="max-width: 220px; font-size: 0.85rem;" title="${reason}">${reason}</td>
+                <td><span class="badge badge-${status.toLowerCase()}">${status}</span></td>
+                <td style="font-size: 0.8rem; color: #475569; max-width: 200px;">${reviewerInfo}</td>
+                <td style="text-align: right;">${actionsHtml}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+async function approveLeave(id) {
+    if (!confirm('Are you sure you want to approve this leave request?')) return;
+    try {
+        const res = await authFetch(`${API_BASE}/leaves/${id}/approve`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reviewComments: 'Approved' })
+        });
+        const json = await res.json();
+        if (res.ok && json.success) {
+            showToast('Leave request approved successfully!', 'success');
+            loadLeaveStats();
+            loadAllLeaves();
+            if (canViewDashboard()) loadDashboardStats();
+        } else {
+            showToast(json.message || 'Failed to approve leave', 'error');
+        }
+    } catch (err) {
+        console.error('Approve leave error:', err);
+    }
+}
+
+function openRejectModal(id) {
+    if (!elements.modalRejectLeave) return;
+    if (elements.rejectLeaveId) elements.rejectLeaveId.value = id;
+    if (elements.rejectComments) elements.rejectComments.value = '';
+    elements.modalRejectLeave.classList.add('open');
+}
+
+async function handleRejectLeaveSubmit(e) {
+    e.preventDefault();
+    const id = elements.rejectLeaveId.value;
+    const reviewComments = elements.rejectComments.value.trim() || 'Rejected';
+
+    try {
+        const res = await authFetch(`${API_BASE}/leaves/${id}/reject`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reviewComments })
+        });
+        const json = await res.json();
+        if (res.ok && json.success) {
+            showToast('Leave request rejected', 'info');
+            closeModal('modal-reject-leave');
+            loadLeaveStats();
+            loadAllLeaves();
+        } else {
+            showToast(json.message || 'Failed to reject leave', 'error');
+        }
+    } catch (err) {
+        console.error('Reject leave error:', err);
+    }
+}
+
+async function cancelLeave(id) {
+    if (!confirm('Are you sure you want to cancel this pending leave request?')) return;
+    try {
+        const res = await authFetch(`${API_BASE}/leaves/${id}/cancel`, {
+            method: 'PATCH'
+        });
+        const json = await res.json();
+        if (res.ok && json.success) {
+            showToast('Leave request cancelled successfully', 'info');
+            if (isEmployee()) {
+                loadMyLeaves();
+            } else {
+                loadLeaveStats();
+                loadAllLeaves();
+            }
+        } else {
+            showToast(json.message || 'Failed to cancel leave request', 'error');
+        }
+    } catch (err) {
+        console.error('Cancel leave error:', err);
+    }
+}
+
+window.openApplyLeaveModal = openApplyLeaveModal;
+window.approveLeave = approveLeave;
+window.openRejectModal = openRejectModal;
+window.cancelLeave = cancelLeave;

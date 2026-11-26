@@ -89,6 +89,12 @@ public class SecurityConfig {
                         // Export CSV -> Admin and HR only
                         .requestMatchers("/api/v1/employees/export/csv").hasAnyRole("ADMIN", "HR")
 
+                        // Leave Management permissions
+                        .requestMatchers(HttpMethod.POST, "/api/v1/leaves").authenticated()
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/leaves/*/cancel").authenticated()
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/leaves/**").hasAnyRole("ADMIN", "HR", "MANAGER")
+                        .requestMatchers("/api/v1/leaves/stats").hasAnyRole("ADMIN", "HR", "MANAGER")
+
                         // Read APIs require any authenticated role (ADMIN, HR, MANAGER, EMPLOYEE)
                         .requestMatchers(HttpMethod.GET, "/api/v1/**").authenticated()
 
