@@ -37,10 +37,8 @@ public class DataInitializer implements CommandLineRunner {
             seedDepartmentsAndEmployees();
         }
 
-        // Seed default RBAC users if empty
-        if (userRepository.count() == 0) {
-            seedUsers();
-        }
+        // Ensure all default role accounts exist (Admin, HR, Manager, Employee)
+        seedUsers();
     }
 
     private void seedDepartmentsAndEmployees() {
@@ -130,44 +128,52 @@ public class DataInitializer implements CommandLineRunner {
 
     private void seedUsers() {
         // 1. System Admin
-        User admin = new User(
-                "admin",
-                "admin@company.com",
-                passwordEncoder.encode("admin123"),
-                new HashSet<>(Collections.singletonList(Role.ROLE_ADMIN))
-        );
+        if (!userRepository.existsByUsername("admin")) {
+            User admin = new User(
+                    "admin",
+                    "admin@company.com",
+                    passwordEncoder.encode("admin123"),
+                    new HashSet<>(Collections.singletonList(Role.ROLE_ADMIN))
+            );
+            userRepository.save(admin);
+        }
 
         // 2. HR Specialist / Manager
-        User hrUser = new User(
-                "hr",
-                "hr@company.com",
-                passwordEncoder.encode("hr123"),
-                new HashSet<>(Collections.singletonList(Role.ROLE_HR))
-        );
-        employeeRepository.findAll().stream()
-                .filter(e -> e.getJobTitle().contains("HR"))
-                .findFirst()
-                .ifPresent(hrUser::setEmployee);
+        if (!userRepository.existsByUsername("hr")) {
+            User hrUser = new User(
+                    "hr",
+                    "hr@company.com",
+                    passwordEncoder.encode("hr123"),
+                    new HashSet<>(Collections.singletonList(Role.ROLE_HR))
+            );
+            employeeRepository.findAll().stream()
+                    .filter(e -> e.getJobTitle().toLowerCase().contains("hr") || e.getJobTitle().toLowerCase().contains("recruiter"))
+                    .findFirst()
+                    .ifPresent(hrUser::setEmployee);
+            userRepository.save(hrUser);
+        }
 
         // 3. Department Manager
-        User manager = new User(
-                "manager",
-                "manager@company.com",
-                passwordEncoder.encode("manager123"),
-                new HashSet<>(Collections.singletonList(Role.ROLE_MANAGER))
-        );
+        if (!userRepository.existsByUsername("manager")) {
+            User manager = new User(
+                    "manager",
+                    "manager@company.com",
+                    passwordEncoder.encode("manager123"),
+                    new HashSet<>(Collections.singletonList(Role.ROLE_MANAGER))
+            );
+            userRepository.save(manager);
+        }
 
         // 4. Regular Employee User
-        User employeeUser = new User(
-                "user",
-                "user@company.com",
-                passwordEncoder.encode("user123"),
-                new HashSet<>(Collections.singletonList(Role.ROLE_EMPLOYEE))
-        );
-
-        // Link employeeUser to the first employee if exists
-        employeeRepository.findAll().stream().findFirst().ifPresent(employeeUser::setEmployee);
-
-        userRepository.saveAll(Arrays.asList(admin, hrUser, manager, employeeUser));
+        if (!userRepository.existsByUsername("user")) {
+            User employeeUser = new User(
+                    "user",
+                    "user@company.com",
+                    passwordEncoder.encode("user123"),
+                    new HashSet<>(Collections.singletonList(Role.ROLE_EMPLOYEE))
+            );
+            employeeRepository.findAll().stream().findFirst().ifPresent(employeeUser::setEmployee);
+            userRepository.save(employeeUser);
+        }
     }
 }
