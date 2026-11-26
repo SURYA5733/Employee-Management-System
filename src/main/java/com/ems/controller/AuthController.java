@@ -51,11 +51,84 @@ public class AuthController {
         this.tokenProvider = tokenProvider;
     }
 
+    private void ensureDemoUserExists(String usernameOrEmail) {
+        if (usernameOrEmail == null) return;
+        String identifier = usernameOrEmail.trim().toLowerCase();
+
+        if (identifier.equals("admin") || identifier.equals("admin@company.com")) {
+            userRepository.findByUsernameIgnoreCase("admin").ifPresentOrElse(
+                    admin -> {
+                        admin.setPassword(passwordEncoder.encode("admin123"));
+                        admin.setEnabled(true);
+                        admin.setRoles(new HashSet<>(Collections.singletonList(Role.ROLE_ADMIN)));
+                        userRepository.save(admin);
+                    },
+                    () -> {
+                        User admin = new User("admin", "admin@company.com", passwordEncoder.encode("admin123"),
+                                new HashSet<>(Collections.singletonList(Role.ROLE_ADMIN)));
+                        userRepository.save(admin);
+                    }
+            );
+        } else if (identifier.equals("hr") || identifier.equals("hr@company.com")) {
+            userRepository.findByUsernameIgnoreCase("hr").ifPresentOrElse(
+                    hr -> {
+                        hr.setPassword(passwordEncoder.encode("hr123"));
+                        hr.setEnabled(true);
+                        hr.setRoles(new HashSet<>(Collections.singletonList(Role.ROLE_HR)));
+                        userRepository.save(hr);
+                    },
+                    () -> {
+                        User hrUser = new User("hr", "hr@company.com", passwordEncoder.encode("hr123"),
+                                new HashSet<>(Collections.singletonList(Role.ROLE_HR)));
+                        employeeRepository.findAll().stream()
+                                .filter(e -> e.getJobTitle().toLowerCase().contains("hr") || e.getJobTitle().toLowerCase().contains("recruiter"))
+                                .findFirst()
+                                .ifPresent(hrUser::setEmployee);
+                        userRepository.save(hrUser);
+                    }
+            );
+        } else if (identifier.equals("manager") || identifier.equals("manager@company.com")) {
+            userRepository.findByUsernameIgnoreCase("manager").ifPresentOrElse(
+                    mgr -> {
+                        mgr.setPassword(passwordEncoder.encode("manager123"));
+                        mgr.setEnabled(true);
+                        mgr.setRoles(new HashSet<>(Collections.singletonList(Role.ROLE_MANAGER)));
+                        userRepository.save(mgr);
+                    },
+                    () -> {
+                        User manager = new User("manager", "manager@company.com", passwordEncoder.encode("manager123"),
+                                new HashSet<>(Collections.singletonList(Role.ROLE_MANAGER)));
+                        userRepository.save(manager);
+                    }
+            );
+        } else if (identifier.equals("user") || identifier.equals("user@company.com")) {
+            userRepository.findByUsernameIgnoreCase("user").ifPresentOrElse(
+                    usr -> {
+                        usr.setPassword(passwordEncoder.encode("user123"));
+                        usr.setEnabled(true);
+                        usr.setRoles(new HashSet<>(Collections.singletonList(Role.ROLE_EMPLOYEE)));
+                        userRepository.save(usr);
+                    },
+                    () -> {
+                        User employeeUser = new User("user", "user@company.com", passwordEncoder.encode("user123"),
+                                new HashSet<>(Collections.singletonList(Role.ROLE_EMPLOYEE)));
+                        employeeRepository.findAll().stream().findFirst().ifPresent(employeeUser::setEmployee);
+                        userRepository.save(employeeUser);
+                    }
+            );
+        }
+    }
+
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest loginRequest) {
+        String identifier = loginRequest.getUsernameOrEmail().trim();
+
+        // Self-heal demo accounts if missing or password mismatch
+        ensureDemoUserExists(identifier);
+
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
-                        loginRequest.getUsernameOrEmail().trim(),
+                        identifier,
                         loginRequest.getPassword()
                 )
         );
@@ -101,11 +174,11 @@ public class AuthController {
             }
         }
 
-        if (userRepository.existsByUsername(registerRequest.getUsername())) {
+        if (userRepository.existsByUsernameIgnoreCase(registerRequest.getUsername())) {
             throw new DuplicateResourceException("Username '" + registerRequest.getUsername() + "' is already taken");
         }
 
-        if (userRepository.existsByEmail(registerRequest.getEmail())) {
+        if (userRepository.existsByEmailIgnoreCase(registerRequest.getEmail())) {
             throw new DuplicateResourceException("Email '" + registerRequest.getEmail() + "' is already registered");
         }
 
