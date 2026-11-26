@@ -7,16 +7,33 @@ A full-stack, enterprise-grade **Employee Management System** built with **Sprin
 ## 🌟 Key Features
 
 ### 🔐 User-Based & Role-Based Access Control (UBAC / RBAC)
-- **Three-Tier Security Roles**:
-  - 👑 **`ROLE_ADMIN`**: Full permissions — create, edit, delete employees; create and delete departments; export CSV; view all analytics.
-  - 💼 **`ROLE_MANAGER`**: Can create and edit employees, view analytics, and export CSV; **cannot** delete employees or modify departments.
-  - 👤 **`ROLE_EMPLOYEE`**: Read-only user access — can view the directory, colleague details, and department structures; **cannot** add, edit, or delete.
+- **Four-Tier Security Hierarchy**:
+  - 👑 **`ROLE_ADMIN`**: Complete administrative control — create, edit, and delete employees; manage and delete departments; create any user account; view HR dashboard and analytics.
+  - 💼 **`ROLE_HR`**: Full employee and department management — add employees, edit employee records, manage employee accounts, manage departments, view HR dashboard and analytics; **cannot** delete employees and **cannot** create Admin accounts.
+  - 👔 **`ROLE_MANAGER`**: Team leadership — view all employees, view own profile, and perform limited edits (e.g. status updates); **cannot** add or delete employees, **cannot** manage departments or accounts, **cannot** view HR dashboard.
+  - 👤 **`ROLE_EMPLOYEE`**: Individual self-service — **isolated access** to only view their own employee record, ID, and account; restricted from viewing other employees or performing any mutations.
+
+#### 📊 Role-Based Permissions Matrix
+
+| Feature | Admin | HR | Manager | Employee |
+| :--- | :---: | :---: | :---: | :---: |
+| **View all employees** | Yes | Yes | Yes | No *(Own profile only)* |
+| **View own profile** | Yes | Yes | Yes | Yes |
+| **Add employees** | Yes | Yes | No | No |
+| **Edit employee details** | Yes | Yes | Limited | No |
+| **Delete employees** | Yes | No | No | No |
+| **Manage departments** | Yes | Yes | No | No |
+| **Manage employee accounts** | Yes | Yes *(No Admin accounts)* | No | No |
+| **View HR dashboard** | Yes | Yes | No | No |
+| **View own account** | Yes | Yes | Yes | Yes |
+
 - **Stateless JWT Authentication**: Secure HMAC-SHA256 tokens passed via `Authorization: Bearer <token>`.
 - **Pre-Configured Demo Accounts**:
   - **Admin**: `admin` / `admin123`
+  - **HR User**: `hr` / `hr123`
   - **Manager**: `manager` / `manager123`
   - **Employee**: `user` / `user123`
-- **Frontend Role Adaptation**: The UI dynamically hides or displays buttons and triggers based on the authenticated user's permissions, with 1-click quick role switcher buttons.
+- **Frontend Role Adaptation**: The UI dynamically hides or displays tabs and action buttons based on the authenticated user's permissions, with 1-click quick role switcher buttons.
 
 ### 🖥️ Full-Stack Interactive Web Dashboard
 - **Executive KPI Cards**: Real-time tracking of Total Staff, Active Employees, On Leave, Departments, and Payroll.

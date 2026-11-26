@@ -137,7 +137,19 @@ public class DataInitializer implements CommandLineRunner {
                 new HashSet<>(Collections.singletonList(Role.ROLE_ADMIN))
         );
 
-        // 2. Department Manager
+        // 2. HR Specialist / Manager
+        User hrUser = new User(
+                "hr",
+                "hr@company.com",
+                passwordEncoder.encode("hr123"),
+                new HashSet<>(Collections.singletonList(Role.ROLE_HR))
+        );
+        employeeRepository.findAll().stream()
+                .filter(e -> e.getJobTitle().contains("HR"))
+                .findFirst()
+                .ifPresent(hrUser::setEmployee);
+
+        // 3. Department Manager
         User manager = new User(
                 "manager",
                 "manager@company.com",
@@ -145,7 +157,7 @@ public class DataInitializer implements CommandLineRunner {
                 new HashSet<>(Collections.singletonList(Role.ROLE_MANAGER))
         );
 
-        // 3. Regular Employee User
+        // 4. Regular Employee User
         User employeeUser = new User(
                 "user",
                 "user@company.com",
@@ -156,6 +168,6 @@ public class DataInitializer implements CommandLineRunner {
         // Link employeeUser to the first employee if exists
         employeeRepository.findAll().stream().findFirst().ifPresent(employeeUser::setEmployee);
 
-        userRepository.saveAll(Arrays.asList(admin, manager, employeeUser));
+        userRepository.saveAll(Arrays.asList(admin, hrUser, manager, employeeUser));
     }
 }

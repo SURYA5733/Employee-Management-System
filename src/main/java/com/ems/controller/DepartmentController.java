@@ -35,7 +35,7 @@ public class DepartmentController {
     }
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'HR')")
     public ResponseEntity<ApiResponse<DepartmentDTO>> createDepartment(
             @Valid @RequestBody DepartmentDTO departmentDTO) {
         DepartmentDTO created = departmentService.createDepartment(departmentDTO);
@@ -43,7 +43,7 @@ public class DepartmentController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'HR')")
     public ResponseEntity<ApiResponse<DepartmentDTO>> updateDepartment(
             @PathVariable Long id,
             @Valid @RequestBody DepartmentDTO departmentDTO) {

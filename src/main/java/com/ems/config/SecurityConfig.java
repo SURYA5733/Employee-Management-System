@@ -68,21 +68,28 @@ public class SecurityConfig {
                                 "/h2-console/**"
                         ).permitAll()
 
-                        // Public Auth APIs
-                        .requestMatchers("/api/v1/auth/**").permitAll()
+                        // Public Auth APIs (Login & Initial setup)
+                        .requestMatchers("/api/v1/auth/login").permitAll()
+                        .requestMatchers("/api/v1/auth/me").authenticated()
 
-                        // Role-Based Authorization for Employees
-                        .requestMatchers(HttpMethod.DELETE, "/api/v1/employees/**").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.POST, "/api/v1/employees/**").hasAnyRole("ADMIN", "MANAGER")
-                        .requestMatchers(HttpMethod.PUT, "/api/v1/employees/**").hasAnyRole("ADMIN", "MANAGER")
-                        .requestMatchers(HttpMethod.PATCH, "/api/v1/employees/**").hasAnyRole("ADMIN", "MANAGER")
+                        // HR Dashboard -> Admin and HR only
+                        .requestMatchers("/api/v1/dashboard/**").hasAnyRole("ADMIN", "HR")
 
-                        // Role-Based Authorization for Departments
-                        .requestMatchers(HttpMethod.POST, "/api/v1/departments/**").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.PUT, "/api/v1/departments/**").hasRole("ADMIN")
+                        // Department Management -> Admin and HR create/update, only Admin deletes
+                        .requestMatchers(HttpMethod.POST, "/api/v1/departments/**").hasAnyRole("ADMIN", "HR")
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/departments/**").hasAnyRole("ADMIN", "HR")
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/departments/**").hasRole("ADMIN")
 
-                        // Read APIs require any authenticated role (ADMIN, MANAGER, EMPLOYEE)
+                        // Employee Mutations -> Admin & HR can add; Admin, HR & Manager can edit; only Admin deletes
+                        .requestMatchers(HttpMethod.POST, "/api/v1/employees/**").hasAnyRole("ADMIN", "HR")
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/employees/**").hasAnyRole("ADMIN", "HR", "MANAGER")
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/employees/**").hasAnyRole("ADMIN", "HR", "MANAGER")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/employees/**").hasRole("ADMIN")
+
+                        // Export CSV -> Admin and HR only
+                        .requestMatchers("/api/v1/employees/export/csv").hasAnyRole("ADMIN", "HR")
+
+                        // Read APIs require any authenticated role (ADMIN, HR, MANAGER, EMPLOYEE)
                         .requestMatchers(HttpMethod.GET, "/api/v1/**").authenticated()
 
                         // All other endpoints require authentication

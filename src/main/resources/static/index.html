@@ -29,23 +29,23 @@
             </div>
 
             <nav class="nav-menu">
-                <button class="nav-item active" data-tab="dashboard">
+                <button class="nav-item active" id="nav-tab-dashboard" data-tab="dashboard">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <rect x="3" y="3" width="7" height="7"></rect>
                         <rect x="14" y="3" width="7" height="7"></rect>
                         <rect x="14" y="14" width="7" height="7"></rect>
                         <rect x="3" y="14" width="7" height="7"></rect>
                     </svg>
-                    <span>Dashboard</span>
+                    <span>HR Dashboard</span>
                 </button>
-                <button class="nav-item" data-tab="employees">
+                <button class="nav-item" id="nav-tab-employees" data-tab="employees">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
                         <circle cx="12" cy="7" r="4"></circle>
                     </svg>
-                    <span>Employees</span>
+                    <span id="nav-employees-label">Employees</span>
                 </button>
-                <button class="nav-item" data-tab="departments">
+                <button class="nav-item" id="nav-tab-departments" data-tab="departments">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M3 21h18"></path>
                         <path d="M5 21V7l8-4v18"></path>
@@ -253,6 +253,14 @@
 
             <!-- TAB 2: EMPLOYEES DIRECTORY -->
             <section id="tab-employees" class="tab-content">
+                <div id="employee-view-notice" class="employee-alert-banner" style="display: none;">
+                    <div class="alert-icon">👤</div>
+                    <div class="alert-body">
+                        <strong>Employee Self-Service View</strong>
+                        <span>You are logged in as an Employee. Per access control policy, you have restricted view access to your own employee record and ID only.</span>
+                    </div>
+                </div>
+
                 <div class="table-container-card">
                     <!-- Filters and Search Toolbar -->
                     <div class="toolbar">
@@ -536,15 +544,19 @@
                     <div class="quick-roles-grid">
                         <button type="button" class="btn-role-quick admin" id="btn-quick-admin">
                             <strong>👑 Admin</strong>
-                            <span>admin123 (Full CRUD)</span>
+                            <span>admin123 (Full Access)</span>
+                        </button>
+                        <button type="button" class="btn-role-quick hr" id="btn-quick-hr">
+                            <strong>💼 HR User</strong>
+                            <span>hr123 (Manage Info & Accounts)</span>
                         </button>
                         <button type="button" class="btn-role-quick manager" id="btn-quick-manager">
-                            <strong>💼 Manager</strong>
-                            <span>manager123 (Add/Edit)</span>
+                            <strong>👔 Manager</strong>
+                            <span>manager123 (View All / Edit)</span>
                         </button>
                         <button type="button" class="btn-role-quick employee" id="btn-quick-employee">
                             <strong>👤 Employee</strong>
-                            <span>user123 (View Only)</span>
+                            <span>user123 (Own Profile Only)</span>
                         </button>
                     </div>
                 </div>

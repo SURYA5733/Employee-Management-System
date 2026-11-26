@@ -1,11 +1,9 @@
 package com.ems.controller;
 
-import com.ems.dto.ApiResponse;
-import com.ems.dto.AuthResponse;
-import com.ems.dto.LoginRequest;
-import com.ems.dto.RegisterRequest;
+import com.ems.dto.*;
 import com.ems.exception.BadRequestException;
 import com.ems.exception.DuplicateResourceException;
+import com.ems.exception.ResourceNotFoundException;
 import com.ems.model.Employee;
 import com.ems.model.Role;
 import com.ems.model.User;
@@ -16,6 +14,7 @@ import com.ems.security.JwtTokenProvider;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -81,7 +80,27 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<ApiResponse<AuthResponse>> register(@Valid @RequestBody RegisterRequest registerRequest) {
+    public ResponseEntity<ApiResponse<AuthResponse>> register(
+            @Valid @RequestBody RegisterRequest registerRequest,
+            @AuthenticationPrincipal CustomUserDetails creatorDetails
+    ) {
+        // Enforce HR restriction: HR cannot create Admin accounts
+        if (creatorDetails != null) {
+            boolean isHr = creatorDetails.getAuthorities().stream()
+                    .anyMatch(a -> a.getAuthority().equals("ROLE_HR"));
+            boolean isAdmin = creatorDetails.getAuthorities().stream()
+                    .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+
+            if (isHr && !isAdmin && registerRequest.getRole() == Role.ROLE_ADMIN) {
+                throw new BadRequestException("HR users are not authorized to create Admin accounts.");
+            }
+        } else {
+            // Unauthenticated public registration defaults to EMPLOYEE
+            if (registerRequest.getRole() == Role.ROLE_ADMIN || registerRequest.getRole() == Role.ROLE_HR) {
+                registerRequest.setRole(Role.ROLE_EMPLOYEE);
+            }
+        }
+
         if (userRepository.existsByUsername(registerRequest.getUsername())) {
             throw new DuplicateResourceException("Username '" + registerRequest.getUsername() + "' is already taken");
         }
@@ -106,7 +125,20 @@ public class AuthController {
 
         User savedUser = userRepository.save(user);
 
-        // Auto-login registered user
+        // If an Admin/HR created this account on behalf of another user, return success without logging into it
+        if (creatorDetails != null) {
+            AuthResponse response = new AuthResponse(
+                    null,
+                    savedUser.getId(),
+                    savedUser.getUsername(),
+                    savedUser.getEmail(),
+                    savedUser.getRoles().stream().map(Role::name).collect(Collectors.toList()),
+                    savedUser.getEmployee() != null ? savedUser.getEmployee().getId() : null
+            );
+            return new ResponseEntity<>(ApiResponse.success("User account created successfully", response), HttpStatus.CREATED);
+        }
+
+        // Auto-login registered user for self-registration
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(registerRequest.getUsername(), registerRequest.getPassword())
         );
@@ -150,5 +182,36 @@ public class AuthController {
         );
 
         return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    @GetMapping("/users")
+    @PreAuthorize("hasAnyRole('ADMIN', 'HR')")
+    public ResponseEntity<ApiResponse<List<UserSummaryDTO>>> getAllUserAccounts() {
+        List<UserSummaryDTO> users = userRepository.findAll().stream()
+                .map(UserSummaryDTO::fromEntity)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(ApiResponse.success(users));
+    }
+
+    @PutMapping("/users/{id}/toggle-status")
+    @PreAuthorize("hasAnyRole('ADMIN', 'HR')")
+    public ResponseEntity<ApiResponse<UserSummaryDTO>> toggleUserStatus(
+            @PathVariable Long id,
+            @AuthenticationPrincipal CustomUserDetails callerDetails
+    ) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + id));
+
+        boolean isCallerAdmin = callerDetails.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+
+        if (user.getRoles().contains(Role.ROLE_ADMIN) && !isCallerAdmin) {
+            throw new BadRequestException("HR users cannot disable or modify Admin accounts.");
+        }
+
+        user.setEnabled(!user.isEnabled());
+        User updated = userRepository.save(user);
+
+        return ResponseEntity.ok(ApiResponse.success("User status updated", UserSummaryDTO.fromEntity(updated)));
     }
 }

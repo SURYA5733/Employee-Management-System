@@ -38,20 +38,49 @@ function isAdmin() {
     return state.auth.roles && state.auth.roles.includes('ROLE_ADMIN');
 }
 
+function isHr() {
+    return state.auth.roles && state.auth.roles.includes('ROLE_HR');
+}
+
 function isManager() {
     return state.auth.roles && state.auth.roles.includes('ROLE_MANAGER');
 }
 
 function isEmployee() {
-    return state.auth.roles && state.auth.roles.includes('ROLE_EMPLOYEE');
+    // Pure employee without administrative, HR, or manager privilege
+    return !isAdmin() && !isHr() && !isManager();
 }
 
-function canWriteEmployees() {
-    return isAdmin() || isManager();
+function canViewDashboard() {
+    return isAdmin() || isHr();
 }
 
-function canDelete() {
+function canViewAllEmployees() {
+    return isAdmin() || isHr() || isManager();
+}
+
+function canAddEmployees() {
+    return isAdmin() || isHr();
+}
+
+function canEditEmployees() {
+    return isAdmin() || isHr() || isManager();
+}
+
+function canDeleteEmployees() {
     return isAdmin();
+}
+
+function canManageDepartments() {
+    return isAdmin() || isHr();
+}
+
+function canDeleteDepartments() {
+    return isAdmin();
+}
+
+function canExportCsv() {
+    return isAdmin() || isHr();
 }
 
 // Authenticated Fetch Wrapper
@@ -65,7 +94,6 @@ async function authFetch(url, options = {}) {
     const res = await fetch(url, { ...options, headers });
 
     if (res.status === 401) {
-        // Token expired or invalid
         handleLogout();
         showToast('Session expired or unauthorized. Please log in.', 'error');
         throw new Error('Unauthorized');
@@ -83,6 +111,10 @@ async function authFetch(url, options = {}) {
 const elements = {
     tabs: document.querySelectorAll('.nav-item'),
     tabContents: document.querySelectorAll('.tab-content'),
+    navTabDashboard: document.getElementById('nav-tab-dashboard'),
+    navTabEmployees: document.getElementById('nav-tab-employees'),
+    navTabDepartments: document.getElementById('nav-tab-departments'),
+    navEmployeesLabel: document.getElementById('nav-employees-label'),
     pageHeading: document.getElementById('page-heading'),
     pageSubheading: document.getElementById('page-subheading'),
 
@@ -95,7 +127,10 @@ const elements = {
     authUserName: document.getElementById('auth-user-name'),
     authUserRole: document.getElementById('auth-user-role'),
     btnLogout: document.getElementById('btn-logout'),
+
+    // Quick Login Demo Buttons
     btnQuickAdmin: document.getElementById('btn-quick-admin'),
+    btnQuickHr: document.getElementById('btn-quick-hr'),
     btnQuickManager: document.getElementById('btn-quick-manager'),
     btnQuickEmployee: document.getElementById('btn-quick-employee'),
 
@@ -109,6 +144,7 @@ const elements = {
     deptBarsContainer: document.getElementById('department-bars-container'),
 
     // Employee List
+    employeeViewNotice: document.getElementById('employee-view-notice'),
     employeesTableBody: document.getElementById('employees-table-body'),
     inputSearch: document.getElementById('input-search'),
     filterDepartment: document.getElementById('filter-department'),
@@ -159,8 +195,10 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
         updateAuthUserUI();
         applyRbacUI();
-        loadDepartments();
-        loadDashboardStats();
+        if (canViewDashboard()) {
+            loadDashboardStats();
+            loadDepartments();
+        }
         loadEmployees();
     }
 });
@@ -187,6 +225,9 @@ function initEventListeners() {
     if (elements.btnQuickAdmin) {
         elements.btnQuickAdmin.addEventListener('click', () => doLogin('admin', 'admin123'));
     }
+    if (elements.btnQuickHr) {
+        elements.btnQuickHr.addEventListener('click', () => doLogin('hr', 'hr123'));
+    }
     if (elements.btnQuickManager) {
         elements.btnQuickManager.addEventListener('click', () => doLogin('manager', 'manager123'));
     }
@@ -197,28 +238,28 @@ function initEventListeners() {
     // Quick Action Tiles
     if (elements.tileAddEmp) {
         elements.tileAddEmp.addEventListener('click', () => {
-            if (canWriteEmployees()) openEmployeeModal();
-            else showToast('Access Denied: Managers or Admins only', 'error');
+            if (canAddEmployees()) openEmployeeModal();
+            else showToast('Access Denied: Only HR and Admins can add employees', 'error');
         });
     }
     if (elements.tileAddDept) {
         elements.tileAddDept.addEventListener('click', () => {
-            if (canDelete()) openDepartmentModal();
-            else showToast('Access Denied: Admins only', 'error');
+            if (canManageDepartments()) openDepartmentModal();
+            else showToast('Access Denied: Only HR and Admins can manage departments', 'error');
         });
     }
 
     // Modal Triggers
     if (elements.btnOpenAddModal) {
         elements.btnOpenAddModal.addEventListener('click', () => {
-            if (canWriteEmployees()) openEmployeeModal();
-            else showToast('Access Denied: Managers or Admins only', 'error');
+            if (canAddEmployees()) openEmployeeModal();
+            else showToast('Access Denied: Only HR and Admins can add employees', 'error');
         });
     }
     if (elements.btnOpenDeptModal) {
         elements.btnOpenDeptModal.addEventListener('click', () => {
-            if (canDelete()) openDepartmentModal();
-            else showToast('Access Denied: Admins only', 'error');
+            if (canManageDepartments()) openDepartmentModal();
+            else showToast('Access Denied: Only HR and Admins can manage departments', 'error');
         });
     }
 
@@ -289,10 +330,10 @@ function initEventListeners() {
         }
     });
 
-    // Export CSV (Auth protected)
+    // Export CSV (Admin & HR only)
     elements.btnExportCsv.addEventListener('click', async () => {
-        if (!canWriteEmployees()) {
-            showToast('Access Denied: Export restricted to Managers and Admins', 'error');
+        if (!canExportCsv()) {
+            showToast('Access Denied: Export restricted to HR and Admins', 'error');
             return;
         }
         try {
@@ -306,7 +347,7 @@ function initEventListeners() {
                 document.body.appendChild(a);
                 a.click();
                 a.remove();
-                showToast('CSV downloaded successfully', 'success');
+                showToast('CSV roster downloaded successfully', 'success');
             }
         } catch (err) {
             console.error('CSV Export Error:', err);
@@ -365,8 +406,13 @@ async function doLogin(usernameOrEmail, password) {
             applyRbacUI();
             showToast(`Welcome back, ${authData.username}!`, 'success');
 
-            loadDepartments();
-            loadDashboardStats();
+            if (canViewDashboard()) {
+                switchTab('dashboard');
+                loadDepartments();
+                loadDashboardStats();
+            } else {
+                switchTab('employees');
+            }
             loadEmployees();
         } else {
             showToast(json.message || 'Invalid username or password', 'error');
@@ -405,6 +451,9 @@ function updateAuthUserUI() {
     if (isAdmin()) {
         primaryRole = 'ADMIN';
         roleClass = 'badge-admin';
+    } else if (isHr()) {
+        primaryRole = 'HR USER';
+        roleClass = 'badge-hr';
     } else if (isManager()) {
         primaryRole = 'MANAGER';
         roleClass = 'badge-manager';
@@ -416,41 +465,79 @@ function updateAuthUserUI() {
 
 // User-Based Access Control UI Guard
 function applyRbacUI() {
-    const isAdm = isAdmin();
+    const isEmp = isEmployee();
     const isMgr = isManager();
-    const canWrite = isAdm || isMgr;
+    const isHumanRes = isHr();
+    const isAdm = isAdmin();
 
-    // Add Employee Button
+    // 1. Dashboard Tab Visibility (Admin and HR only)
+    if (elements.navTabDashboard) {
+        elements.navTabDashboard.style.display = canViewDashboard() ? 'flex' : 'none';
+    }
+
+    // 2. Departments Tab Visibility (Admin and HR only)
+    if (elements.navTabDepartments) {
+        elements.navTabDepartments.style.display = canManageDepartments() ? 'flex' : 'none';
+    }
+
+    // 3. Navigation labels and notices for Employee
+    if (isEmp) {
+        if (elements.navEmployeesLabel) elements.navEmployeesLabel.textContent = 'My Profile';
+        if (elements.employeeViewNotice) elements.employeeViewNotice.style.display = 'flex';
+        if (state.currentTab === 'dashboard' || state.currentTab === 'departments') {
+            switchTab('employees');
+        }
+    } else {
+        if (elements.navEmployeesLabel) elements.navEmployeesLabel.textContent = 'Employees';
+        if (elements.employeeViewNotice) elements.employeeViewNotice.style.display = 'none';
+    }
+
+    // 4. If Manager logs in, ensure not on restricted tabs
+    if (isMgr && (state.currentTab === 'dashboard' || state.currentTab === 'departments')) {
+        switchTab('employees');
+    }
+
+    // 5. Add Employee Button (Admin and HR only; Manager & Employee cannot add)
     if (elements.btnOpenAddModal) {
-        elements.btnOpenAddModal.style.display = canWrite ? 'inline-flex' : 'none';
+        elements.btnOpenAddModal.style.display = canAddEmployees() ? 'inline-flex' : 'none';
     }
 
-    // Export CSV Button
+    // 6. Export CSV Button (Admin and HR only)
     if (elements.btnExportCsv) {
-        elements.btnExportCsv.style.display = canWrite ? 'inline-flex' : 'none';
+        elements.btnExportCsv.style.display = canExportCsv() ? 'inline-flex' : 'none';
     }
 
-    // Add Department Button
+    // 7. Add Department Button (Admin and HR only)
     if (elements.btnOpenDeptModal) {
-        elements.btnOpenDeptModal.style.display = isAdm ? 'inline-flex' : 'none';
+        elements.btnOpenDeptModal.style.display = canManageDepartments() ? 'inline-flex' : 'none';
     }
 
-    // Quick Action Tiles
+    // 8. Quick Action Tiles in Dashboard
     if (elements.tileAddEmp) {
-        elements.tileAddEmp.style.display = canWrite ? 'flex' : 'none';
+        elements.tileAddEmp.style.display = canAddEmployees() ? 'flex' : 'none';
     }
     if (elements.tileAddDept) {
-        elements.tileAddDept.style.display = isAdm ? 'flex' : 'none';
+        elements.tileAddDept.style.display = canManageDepartments() ? 'flex' : 'none';
     }
 
-    // Modal Edit button in Profile View
+    // 9. Edit button inside Profile View Modal
     if (elements.btnEditFromView) {
-        elements.btnEditFromView.style.display = canWrite ? 'inline-flex' : 'none';
+        elements.btnEditFromView.style.display = canEditEmployees() ? 'inline-flex' : 'none';
     }
 }
 
 // Tab Switching
 function switchTab(tabName) {
+    // Prevent unauthorized navigation to restricted tabs
+    if (tabName === 'dashboard' && !canViewDashboard()) {
+        showToast('Access Denied: Only HR and Admins can view the HR dashboard', 'error');
+        return;
+    }
+    if (tabName === 'departments' && !canManageDepartments()) {
+        showToast('Access Denied: Only HR and Admins can manage departments', 'error');
+        return;
+    }
+
     state.currentTab = tabName;
     elements.tabs.forEach(t => {
         if (t.getAttribute('data-tab') === tabName) {
@@ -469,22 +556,29 @@ function switchTab(tabName) {
     });
 
     if (tabName === 'dashboard') {
-        elements.pageHeading.textContent = 'Dashboard Overview';
-        elements.pageSubheading.textContent = 'Manage team members, roles, and department performance';
+        elements.pageHeading.textContent = 'HR & Operations Dashboard';
+        elements.pageSubheading.textContent = 'Manage team members, headcount metrics, and payroll performance';
         loadDashboardStats();
     } else if (tabName === 'employees') {
-        elements.pageHeading.textContent = 'Employees Directory';
-        elements.pageSubheading.textContent = 'Search, filter, view and manage staff records';
+        if (isEmployee()) {
+            elements.pageHeading.textContent = 'My Employee Account';
+            elements.pageSubheading.textContent = 'View your personal employee profile, department, and role';
+        } else {
+            elements.pageHeading.textContent = 'Employees Directory';
+            elements.pageSubheading.textContent = 'Search, filter, view and manage company staff records';
+        }
         loadEmployees();
     } else if (tabName === 'departments') {
-        elements.pageHeading.textContent = 'Departments';
-        elements.pageSubheading.textContent = 'Organizational business units and structures';
+        elements.pageHeading.textContent = 'Departments Directory';
+        elements.pageSubheading.textContent = 'Manage company business units and office locations';
         loadDepartments();
     }
 }
 
 // Fetch & Render Dashboard Stats
 async function loadDashboardStats() {
+    if (!canViewDashboard()) return;
+
     try {
         const res = await authFetch(`${API_BASE}/dashboard/stats`);
         const json = await res.json();
@@ -534,6 +628,8 @@ function renderDepartmentBars(dist, total) {
 
 // Fetch & Render Departments
 async function loadDepartments() {
+    if (!canManageDepartments()) return;
+
     try {
         const res = await authFetch(`${API_BASE}/departments`);
         const json = await res.json();
@@ -554,7 +650,8 @@ function renderDepartmentCards(departments) {
         return;
     }
 
-    const showDelete = isAdmin();
+    // Only Admin can delete departments; HR manages/adds/edits
+    const showDelete = canDeleteDepartments();
 
     elements.departmentsCardsContainer.innerHTML = departments.map(d => `
         <div class="dept-card">
@@ -594,7 +691,7 @@ function populateDepartmentDropdowns(departments) {
 // Fetch & Render Employees
 async function loadEmployees() {
     try {
-        elements.employeesTableBody.innerHTML = `<tr><td colspan="7" class="loading-cell">Loading employees...</td></tr>`;
+        elements.employeesTableBody.innerHTML = `<tr><td colspan="7" class="loading-cell">Loading employee data...</td></tr>`;
 
         const params = new URLSearchParams({
             page: state.pagination.page,
@@ -621,7 +718,7 @@ async function loadEmployees() {
         }
     } catch (err) {
         console.error('Failed to load employees:', err);
-        elements.employeesTableBody.innerHTML = `<tr><td colspan="7" class="empty-cell">Failed to load employees. Please check authentication and backend.</td></tr>`;
+        elements.employeesTableBody.innerHTML = `<tr><td colspan="7" class="empty-cell">Failed to load employee records.</td></tr>`;
     }
 }
 
@@ -630,16 +727,16 @@ function renderEmployeesTable(employees) {
         elements.employeesTableBody.innerHTML = `
             <tr>
                 <td colspan="7" class="empty-cell">
-                    <p style="font-size: 1rem; color: #475569; margin-bottom: 0.5rem;">No employees found</p>
-                    <span style="font-size: 0.85rem;">Try adjusting your search criteria or add a new employee.</span>
+                    <p style="font-size: 1rem; color: #475569; margin-bottom: 0.5rem;">No employee records found</p>
+                    <span style="font-size: 0.85rem;">Adjust your search or contact HR to link your employee ID.</span>
                 </td>
             </tr>
         `;
         return;
     }
 
-    const canEdit = canWriteEmployees();
-    const canDel = canDelete();
+    const canEdit = canEditEmployees();
+    const canDel = canDeleteEmployees();
 
     elements.employeesTableBody.innerHTML = employees.map(emp => {
         const initials = ((emp.firstName?.[0] || '') + (emp.lastName?.[0] || '')).toUpperCase();
@@ -653,7 +750,7 @@ function renderEmployeesTable(employees) {
                     <div class="user-cell">
                         <div class="avatar">${initials}</div>
                         <div>
-                            <div class="user-name">${escapeHtml(emp.fullName)}</div>
+                            <div class="user-name">${escapeHtml(emp.fullName)} <span style="font-size: 0.75rem; color: #94a3b8; font-weight: normal;">(#${emp.id})</span></div>
                             <div class="user-email">${escapeHtml(emp.email)}</div>
                         </div>
                     </div>
@@ -680,7 +777,7 @@ function renderEmployeesTable(employees) {
                             </svg>
                         </button>
                         ${canEdit ? `
-                        <button class="icon-btn" onclick="editEmployee(${emp.id})" title="Edit Employee">
+                        <button class="icon-btn" onclick="editEmployee(${emp.id})" title="Edit Details (HR/Admin/Manager)">
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
@@ -709,7 +806,7 @@ function updatePaginationUI(pageData) {
     const start = total === 0 ? 0 : page * size + 1;
     const end = Math.min((page + 1) * size, total);
 
-    elements.paginationInfo.textContent = `Showing ${start}-${end} of ${total} employees`;
+    elements.paginationInfo.textContent = `Showing ${start}-${end} of ${total} record(s)`;
     elements.pageDisplay.textContent = `Page ${page + 1} of ${Math.max(totalPages, 1)}`;
 
     elements.btnPrevPage.disabled = page === 0;
@@ -718,10 +815,15 @@ function updatePaginationUI(pageData) {
 
 // Modal Handlers
 function openEmployeeModal(emp = null) {
-    if (!canWriteEmployees()) {
-        showToast('Access Denied: Managers or Admins only', 'error');
+    if (!canAddEmployees() && !emp) {
+        showToast('Access Denied: Only HR and Admins can add new employees', 'error');
         return;
     }
+    if (emp && !canEditEmployees()) {
+        showToast('Access Denied: You do not have permission to edit records', 'error');
+        return;
+    }
+
     elements.formEmployee.reset();
     document.getElementById('emp-id').value = '';
 
@@ -740,7 +842,7 @@ function openEmployeeModal(emp = null) {
         document.getElementById('emp-status').value = emp.status || 'ACTIVE';
         document.getElementById('emp-address').value = emp.address || '';
     } else {
-        elements.modalEmployeeTitle.textContent = 'Add New Employee';
+        elements.modalEmployeeTitle.textContent = 'Add New Employee (HR / Admin)';
         document.getElementById('emp-hiredate').valueAsDate = new Date();
     }
 
@@ -748,8 +850,8 @@ function openEmployeeModal(emp = null) {
 }
 
 function openDepartmentModal(dept = null) {
-    if (!canDelete()) {
-        showToast('Access Denied: Only Admins can manage departments', 'error');
+    if (!canManageDepartments()) {
+        showToast('Access Denied: Only HR and Admins can manage departments', 'error');
         return;
     }
     elements.formDepartment.reset();
@@ -763,7 +865,7 @@ function openDepartmentModal(dept = null) {
         document.getElementById('dept-location').value = dept.location || '';
         document.getElementById('dept-description').value = dept.description || '';
     } else {
-        elements.modalDeptTitle.textContent = 'Add Department';
+        elements.modalDeptTitle.textContent = 'Add Department (HR / Admin)';
     }
 
     elements.modalDept.classList.add('open');
@@ -796,6 +898,10 @@ async function viewEmployeeProfile(id) {
                 </div>
                 <div class="profile-grid">
                     <div class="profile-field">
+                        <label>Employee ID</label>
+                        <div>#${emp.id}</div>
+                    </div>
+                    <div class="profile-field">
                         <label>Email Address</label>
                         <div>${escapeHtml(emp.email)}</div>
                     </div>
@@ -804,7 +910,7 @@ async function viewEmployeeProfile(id) {
                         <div>${escapeHtml(emp.phone || 'N/A')}</div>
                     </div>
                     <div class="profile-field">
-                        <label>Annual Salary</label>
+                        <label>Annual Compensation</label>
                         <div style="font-weight: 700; color: #10b981;">${formatCurrency(emp.salary)} / year</div>
                     </div>
                     <div class="profile-field">
@@ -829,14 +935,13 @@ async function viewEmployeeProfile(id) {
         }
     } catch (err) {
         console.error('Error fetching employee details:', err);
-        showToast('Could not load employee details', 'error');
     }
 }
 
 // Edit Trigger
 function editEmployee(id) {
-    if (!canWriteEmployees()) {
-        showToast('Access Denied: You need Manager or Admin role to edit records', 'error');
+    if (!canEditEmployees()) {
+        showToast('Access Denied: You do not have permission to edit records', 'error');
         return;
     }
     const emp = state.employees.find(e => e.id === id);
@@ -851,9 +956,9 @@ function editEmployee(id) {
     }
 }
 
-// Delete Confirmation
+// Delete Confirmation (Admin Only)
 function confirmDeleteEmployee(id, name) {
-    if (!canDelete()) {
+    if (!canDeleteEmployees()) {
         showToast('Access Denied: Only Admins are authorized to delete employees', 'error');
         return;
     }
@@ -863,7 +968,7 @@ function confirmDeleteEmployee(id, name) {
 }
 
 function confirmDeleteDepartment(id, name) {
-    if (!canDelete()) {
+    if (!canDeleteDepartments()) {
         showToast('Access Denied: Only Admins can delete departments', 'error');
         return;
     }
@@ -886,10 +991,10 @@ async function handleConfirmDelete() {
             closeModal('modal-delete');
             if (type === 'employee') {
                 loadEmployees();
-                loadDashboardStats();
+                if (canViewDashboard()) loadDashboardStats();
             } else {
                 loadDepartments();
-                loadDashboardStats();
+                if (canViewDashboard()) loadDashboardStats();
             }
         } else {
             showToast(json.message || 'Deletion failed', 'error');
@@ -935,7 +1040,7 @@ async function handleEmployeeFormSubmit(e) {
             showToast(json.message || (isEdit ? 'Employee updated' : 'Employee created'), 'success');
             closeModal('modal-employee');
             loadEmployees();
-            loadDashboardStats();
+            if (canViewDashboard()) loadDashboardStats();
         } else {
             const errorMsg = json.validationErrors ?
                 Object.values(json.validationErrors).join(', ') :
@@ -976,7 +1081,7 @@ async function handleDepartmentFormSubmit(e) {
             showToast(json.message || (isEdit ? 'Department updated' : 'Department created'), 'success');
             closeModal('modal-department');
             loadDepartments();
-            loadDashboardStats();
+            if (canViewDashboard()) loadDashboardStats();
         } else {
             showToast(json.message || 'Failed to save department', 'error');
         }
